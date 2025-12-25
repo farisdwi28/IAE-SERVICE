@@ -1,4 +1,5 @@
 const { Student } = require('../models');
+const { Class } = require('../models');
 
 exports.syncStudentData = async (req, res) => {
     // Deklarasikan action di luar try agar bisa diakses di catch
@@ -67,5 +68,45 @@ exports.syncStudentData = async (req, res) => {
             message: 'Sync failed on receiver', 
             error: error.message 
         });
+    }
+};
+
+exports.syncClass = async (req, res) => {
+
+    const { action, data } = req.body;
+    console.log(`[SYNC CLASS] Received Action: ${action} | ID: ${data.id}`);
+    try {
+        switch (action) {
+        case 'CREATE':
+
+            // Kita paksa pakai ID dari Admin agar sinkron
+            await Class.create({
+                id: data.id, 
+                name: data.name,
+            // tambahkan field lain jika ada
+            });
+            break;
+
+        case 'UPDATE':
+            await Class.update(
+                { name: data.name },
+                { where: { id: data.id } }
+            );
+            break;
+
+        case 'DELETE':
+            await Class.destroy({ where: { id: data.id } });
+            break;        
+
+        default:
+            console.warn(`Unknown action: ${action}`);
+        }
+
+        res.status(200).json({ message: 'Sync Class Success' });
+    } catch (error) {
+        console.error('[SYNC CLASS ERROR]', error.message);
+
+        // Return 200 agar Admin tidak menganggap gagal total jika data sudah ada (idempotency)
+        res.status(500).json({ error: error.message });
     }
 };
