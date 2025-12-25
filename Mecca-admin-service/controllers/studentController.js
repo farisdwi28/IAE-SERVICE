@@ -11,25 +11,23 @@ const generatePassword = (dob) => {
     return Math.random().toString(36).slice(-8);
 };
 
-// [BARU] Fungsi Helper untuk Broadcast ke Service Lain
+// [HELPER] Broadcast Data ke Service Lain (Student, Teacher, Parent)
 const broadcastToServices = async (action, data) => {
-    // Daftar URL service lain yang perlu menerima data ini
     const services = [
         'http://student-service:3003',
         'http://teacher-service:3004',
         'http://parent-service:3005'
     ];
 
-    // Kirim request secara paralel ke semua service
+    console.log(`[BROADCAST] Sending ${action} for Student ID ${data.id} to all services...`);
+
     const syncPromises = services.map(serviceUrl => {
         return axios.post(`${serviceUrl}/api/sync/students`, {
-            action: action, // 'CREATE' atau 'UPDATE'
-            data: data      // Data siswa lengkap
+            action: action, // 'CREATE', 'UPDATE', atau 'DELETE'
+            data: data      // Data lengkap siswa
         }).catch(err => {
-            // Kita log error tapi TIDAK melempar error agar transaksi utama di Admin tidak gagal 
-            // hanya karena salah satu service anak (misal Parent service) sedang down.
-            // Jika ingin strict consistency (harus sukses semua), ganti jadi throw err.
-            console.error(`Gagal sync ke ${serviceUrl}:`, err.message);
+            // Log error agar terlihat di terminal Docker jika ada service yang gagal
+            console.error(`[BROADCAST ERROR] Gagal sync ke ${serviceUrl}:`, err.message);
         });
     });
 
@@ -41,16 +39,16 @@ exports.createStudent = async (req, res) => {
     try {
         const { name, dob, parentName, parentContact, parentEmail, address, isCatering } = req.body;
 
-        // 1. Auto-generate NIS (Simple logic: Year + Random 4 digits)
+        // 1. Auto-generate NIS
         const year = new Date().getFullYear();
         const random = Math.floor(1000 + Math.random() * 9000);
         const nis = `${year}${random}`;
 
-        // 2. Generate Password (Raw for Auth Service, Hashed for Admin DB)
+        // 2. Generate Password
         const password = generatePassword(dob);
         const hashedPassword = bcrypt.hashSync(password, 8);
 
-        // 3. Create Student in Admin DB
+        // 3. Simpan di Database Admin
         const student = await Student.create({
             nis,
             name,
@@ -64,47 +62,28 @@ exports.createStudent = async (req, res) => {
             isActive: false
         }, { transaction: t });
 
-        // --- Generate Initial Bills ---
+        // 4. Generate Tagihan Awal (Uang Gedung & SPP)
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
+        const dueDate = new Date();
+        dueDate.setMonth(dueDate.getMonth() + 1);
 
-        // 4. Uang Gedung (One-time)
-        const buildingFee = await Fee.findOne({ where: { name: 'Uang Gedung' }, transaction: t });
-        if (buildingFee) {
-            const dueDate = new Date();
-            dueDate.setMonth(dueDate.getMonth() + 1);
-
+        const fees = await Fee.findAll({ where: { name: ['Uang Gedung', 'SPP'] }, transaction: t });
+        
+        for (const fee of fees) {
             await Bill.create({
-                billNumber: `BILL-${student.nis}-BLD-${Date.now()}`,
-                amount: buildingFee.amount,
+                billNumber: `BILL-${student.nis}-${fee.name.substr(0,3).toUpperCase()}-${Date.now()}`,
+                amount: fee.amount,
                 status: 'Pending',
                 dueDate: dueDate,
                 studentId: student.id,
-                feeId: buildingFee.id,
+                feeId: fee.id,
                 month: currentMonth,
                 year: currentYear
             }, { transaction: t });
         }
 
-        // 5. Create Initial SPP Bill (Pending)
-        const sppFee = await Fee.findOne({ where: { name: 'SPP' }, transaction: t });
-        if (sppFee) {
-            const dueDate = new Date();
-            dueDate.setMonth(dueDate.getMonth() + 1);
-
-            await Bill.create({
-                billNumber: `BILL-${student.nis}-SPP-${currentMonth}-${currentYear}`,
-                amount: sppFee.amount,
-                status: 'Pending',
-                dueDate: dueDate,
-                studentId: student.id,
-                feeId: sppFee.id,
-                month: currentMonth,
-                year: currentYear
-            }, { transaction: t });
-        }
-
-        // 6. [INTEGRASI] Register Account to Auth Service
+        // 5. [INTEGRASI] Register Akun ke Auth Service
         try {
             const authResponse = await axios.post('http://auth-service:3001/graphql', {
                 query: `
@@ -116,8 +95,8 @@ exports.createStudent = async (req, res) => {
                     }
                 `,
                 variables: {
-                    nis: nis,             
-                    password: password,   
+                    nis: nis,
+                    password: password, // Kirim password mentah
                     name: name
                 }
             });
@@ -125,21 +104,18 @@ exports.createStudent = async (req, res) => {
             if (authResponse.data.errors) {
                 throw new Error('Auth Service Error: ' + authResponse.data.errors[0].message);
             }
-
         } catch (authError) {
-            console.error("Failed to register to Auth Service:", authError.message);
-            throw new Error('Failed to register account in Auth Service. Transaction rolled back.');
+            console.error("Auth Service Failed:", authError.message);
+            throw new Error('Gagal mendaftarkan akun di Auth Service. Transaksi dibatalkan.');
         }
 
-        // 7. [BARU] Broadcast ke Service Lain (Student, Teacher, Parent)
-        // Dipanggil sebelum commit agar data siap di semua tempat
+        // 6. [BARU] Broadcast 'CREATE' ke Service Lain
         await broadcastToServices('CREATE', student.toJSON());
 
-        // 8. Commit Transaction (Semua sukses)
         await t.commit();
         
         res.status(201).json({ 
-            message: 'Student created successfully. Account registered, bills generated, and data synced.', 
+            message: 'Student created successfully. Account registered, bills generated, and synced.', 
             data: { 
                 ...student.toJSON(), 
                 defaultPassword: password 
@@ -156,7 +132,7 @@ exports.approveStudent = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { level } = req.body; 
+        const { level } = req.body;
 
         const student = await Student.findByPk(id, { transaction: t });
         if (!student) {
@@ -168,21 +144,13 @@ exports.approveStudent = async (req, res) => {
             return res.status(400).json({ message: 'Student is already active' });
         }
 
-        const classes = await Class.findAll({
-            where: { level },
-            transaction: t,
-            lock: true
-        });
-
+        // Cari Kelas yang tersedia
+        const classes = await Class.findAll({ where: { level }, transaction: t, lock: true });
         let assignedClass = null;
+        
         for (const cls of classes) {
-            const count = await Student.count({
-                where: { classId: cls.id, isActive: true },
-                transaction: t
-            });
-            
-            const capacity = cls.capacity || 30; 
-
+            const count = await Student.count({ where: { classId: cls.id, isActive: true }, transaction: t });
+            const capacity = cls.capacity || 30;
             if (count < capacity) {
                 assignedClass = cls;
                 break;
@@ -191,31 +159,116 @@ exports.approveStudent = async (req, res) => {
 
         if (!assignedClass) {
             await t.rollback();
-            return res.status(400).json({ message: `No available classes for level ${level}. Please create a new class.` });
+            return res.status(400).json({ message: `No available classes for level ${level}.` });
         }
 
+        // Update status siswa
         await student.update({
             isActive: true,
             classId: assignedClass.id
         }, { transaction: t });
 
+        // Update tagihan awal jadi Paid
         await Bill.update(
             { status: 'Paid', paidDate: new Date() },
-            {
-                where: {
-                    studentId: student.id,
-                    status: 'Pending'
-                },
-                transaction: t
-            }
+            { where: { studentId: student.id, status: 'Pending' }, transaction: t }
         );
 
-        // [BARU] Broadcast Update ke Service Lain
-        // Penting agar Teacher Service tahu siswa ini masuk kelas mana
+        // [BARU] Broadcast 'UPDATE' ke Service Lain (agar mereka tau siswa sudah aktif & punya kelas)
         await broadcastToServices('UPDATE', student.toJSON());
 
         await t.commit();
-        res.status(200).json({ message: `Student approved and assigned to class ${assignedClass.name}`, data: student });
+        res.status(200).json({ message: `Student approved into ${assignedClass.name}`, data: student });
+    } catch (error) {
+        await t.rollback();
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.updateStudent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, classId, parentName, parentContact, parentEmail, address, isCatering } = req.body;
+
+        const student = await Student.findByPk(id);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        await student.update({ name, classId, parentName, parentContact, parentEmail, address, isCatering });
+        
+        // [BARU] Broadcast 'UPDATE' data diri
+        await broadcastToServices('UPDATE', student.toJSON());
+
+        res.status(200).json({ message: 'Student updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.deleteStudent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const student = await Student.findByPk(id);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        // Simpan data ID sebelum dihapus untuk dikirim ke broadcast
+        const studentData = student.toJSON();
+
+        // 1. [BARU] Hapus Akun di Auth Service
+        // Note: Pastikan Auth Service memiliki mutation 'deleteUser' atau 'deleteStudent'
+        try {
+            await axios.post('http://auth-service:3001/graphql', {
+                query: `
+                    mutation DeleteUser($username: String!) {
+                        deleteUser(username: $username)
+                    }
+                `,
+                variables: { username: student.nis }
+            });
+        } catch (authErr) {
+            // Kita log error tapi tetap lanjut menghapus data di Admin agar tidak stuck
+            console.warn(`[WARNING] Gagal menghapus akun Auth untuk NIS ${student.nis}. Lanjut delete lokal.`);
+        }
+
+        // 2. Hapus di Database Admin
+        await student.destroy();
+        
+        // 3. Broadcast 'DELETE' ke service lain
+        // Ini yang akan menghapus data di database Student, Teacher, dan Parent
+        await broadcastToServices('DELETE', studentData);
+
+        res.status(200).json({ message: 'Student deleted successfully and synced to all services.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.promoteStudent = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const student = await Student.findByPk(id, { include: [Class], transaction: t });
+
+        if (!student) { await t.rollback(); return res.status(404).json({ message: 'Student not found' }); }
+        if (!student.Class) { await t.rollback(); return res.status(400).json({ message: 'No class assigned' }); }
+
+        const nextLevel = student.Class.level + 1;
+        const classes = await Class.findAll({ where: { level: nextLevel }, transaction: t, lock: true });
+        
+        let assignedClass = null;
+        for (const cls of classes) {
+            const count = await Student.count({ where: { classId: cls.id, isActive: true }, transaction: t });
+            if (count < (cls.capacity || 30)) { assignedClass = cls; break; }
+        }
+
+        if (!assignedClass) { await t.rollback(); return res.status(400).json({ message: `No classes for level ${nextLevel}` }); }
+
+        await student.update({ classId: assignedClass.id }, { transaction: t });
+        
+        // [BARU] Broadcast 'UPDATE' kenaikan kelas
+        await broadcastToServices('UPDATE', student.toJSON());
+
+        await t.commit();
+        res.status(200).json({ message: `Promoted to ${assignedClass.name}` });
     } catch (error) {
         await t.rollback();
         res.status(500).json({ message: error.message });
@@ -226,30 +279,16 @@ exports.getAllStudents = async (req, res) => {
     try {
         const { page = 1, limit = 10, search = '' } = req.query;
         const offset = (page - 1) * limit;
-
-        const whereClause = {};
-        if (search) {
-            whereClause[Op.or] = [
-                { name: { [Op.like]: `%${search}%` } },
-                { nis: { [Op.like]: `%${search}%` } }
-            ];
-        }
+        const whereClause = search ? { [Op.or]: [{ name: { [Op.like]: `%${search}%` } }, { nis: { [Op.like]: `%${search}%` } }] } : {};
 
         const { count, rows } = await Student.findAndCountAll({
             where: whereClause,
             include: [{ model: Class, attributes: ['name'] }],
             attributes: { exclude: ['password'] },
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            order: [['createdAt', 'DESC']]
+            limit: parseInt(limit), offset: parseInt(offset), order: [['createdAt', 'DESC']]
         });
 
-        res.status(200).json({
-            totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
-            students: rows
-        });
+        res.status(200).json({ totalItems: count, totalPages: Math.ceil(count / limit), currentPage: parseInt(page), students: rows });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
