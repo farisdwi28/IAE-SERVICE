@@ -72,30 +72,44 @@ exports.syncStudentData = async (req, res) => {
 };
 
 exports.syncClass = async (req, res) => {
-
     const { action, data } = req.body;
-    console.log(`[SYNC CLASS] Received Action: ${action} | ID: ${data.id}`);
+    
+    // Debugging: Cek data apa saja yang masuk
+    console.log(`[SYNC CLASS] Action: ${action} | ID: ${data.id} | Level: ${data.level}`);
+
     try {
+        // Kita siapkan payload lengkap agar semua data masuk
+        const classPayload = {
+            id: data.id,
+            name: data.name,
+            level: data.level,
+            capacity: data.capacity,
+            // Opsional: Jika ingin tanggal pembuatan sama persis dengan Admin
+            // createdAt: data.createdAt, 
+            // updatedAt: data.updatedAt
+        };
+
         switch (action) {
         case 'CREATE':
-
-            // Kita paksa pakai ID dari Admin agar sinkron
-            await Class.create({
-                id: data.id, 
-                name: data.name,
-            // tambahkan field lain jika ada
-            });
+            // Cek dulu apakah data sudah ada (untuk menghindari error Duplicate Entry)
+            const existingClass = await Class.findByPk(data.id);
+            if (!existingClass) {
+                await Class.create(classPayload);
+                console.log(`[SYNC SUCCESS] Created Class ${data.name}`);
+            } else {
+                console.log(`[SYNC INFO] Class ID ${data.id} already exists. Skipping.`);
+            }
             break;
 
         case 'UPDATE':
-            await Class.update(
-                { name: data.name },
-                { where: { id: data.id } }
-            );
+            // Update semua field
+            await Class.update(classPayload, { where: { id: data.id } });
+            console.log(`[SYNC SUCCESS] Updated Class ${data.name}`);
             break;
 
         case 'DELETE':
             await Class.destroy({ where: { id: data.id } });
+            console.log(`[SYNC SUCCESS] Deleted Class ID ${data.id}`);
             break;        
 
         default:
@@ -105,8 +119,6 @@ exports.syncClass = async (req, res) => {
         res.status(200).json({ message: 'Sync Class Success' });
     } catch (error) {
         console.error('[SYNC CLASS ERROR]', error.message);
-
-        // Return 200 agar Admin tidak menganggap gagal total jika data sudah ada (idempotency)
         res.status(500).json({ error: error.message });
     }
 };

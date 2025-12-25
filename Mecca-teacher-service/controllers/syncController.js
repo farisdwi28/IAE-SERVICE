@@ -73,34 +73,43 @@ exports.syncStudentData = async (req, res) => {
 
 exports.syncClass = async (req, res) => {
     const { action, data } = req.body;
-    console.log(`[SYNC CLASS] Received Action: ${action} | ID: ${data.id}`);
+    
+    // Debugging: Cek data apa saja yang masuk
+    console.log(`[SYNC CLASS] Action: ${action} | ID: ${data.id} | Level: ${data.level}`);
 
     try {
+        // Kita siapkan payload lengkap agar semua data masuk
+        const classPayload = {
+            id: data.id,
+            name: data.name,
+            level: data.level,
+            capacity: data.capacity,
+            // Opsional: Jika ingin tanggal pembuatan sama persis dengan Admin
+            // createdAt: data.createdAt, 
+            // updatedAt: data.updatedAt
+        };
+
         switch (action) {
         case 'CREATE':
-            // Update: Masukkan level dan capacity juga
-            await Class.create({
-                id: data.id, 
-                name: data.name,
-                level: data.level,         // Tambahan
-                capacity: data.capacity    // Tambahan
-            });
+            // Cek dulu apakah data sudah ada (untuk menghindari error Duplicate Entry)
+            const existingClass = await Class.findByPk(data.id);
+            if (!existingClass) {
+                await Class.create(classPayload);
+                console.log(`[SYNC SUCCESS] Created Class ${data.name}`);
+            } else {
+                console.log(`[SYNC INFO] Class ID ${data.id} already exists. Skipping.`);
+            }
             break;
 
         case 'UPDATE':
-            // Update: Update level dan capacity juga
-            await Class.update(
-                { 
-                    name: data.name,
-                    level: data.level,     // Tambahan
-                    capacity: data.capacity // Tambahan
-                },
-                { where: { id: data.id } }
-            );
+            // Update semua field
+            await Class.update(classPayload, { where: { id: data.id } });
+            console.log(`[SYNC SUCCESS] Updated Class ${data.name}`);
             break;
 
         case 'DELETE':
             await Class.destroy({ where: { id: data.id } });
+            console.log(`[SYNC SUCCESS] Deleted Class ID ${data.id}`);
             break;        
 
         default:
