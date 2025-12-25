@@ -11,6 +11,31 @@ const generatePassword = (dob) => {
     return Math.random().toString(36).slice(-8);
 };
 
+// [BARU] Fungsi Helper untuk Broadcast ke Service Lain
+const broadcastToServices = async (action, data) => {
+    // Daftar URL service lain yang perlu menerima data ini
+    const services = [
+        'http://student-service:3003',
+        'http://teacher-service:3004',
+        'http://parent-service:3005'
+    ];
+
+    // Kirim request secara paralel ke semua service
+    const syncPromises = services.map(serviceUrl => {
+        return axios.post(`${serviceUrl}/api/sync/students`, {
+            action: action, // 'CREATE' atau 'UPDATE'
+            data: data      // Data siswa lengkap
+        }).catch(err => {
+            // Kita log error tapi TIDAK melempar error agar transaksi utama di Admin tidak gagal 
+            // hanya karena salah satu service anak (misal Parent service) sedang down.
+            // Jika ingin strict consistency (harus sukses semua), ganti jadi throw err.
+            console.error(`Gagal sync ke ${serviceUrl}:`, err.message);
+        });
+    });
+
+    await Promise.all(syncPromises);
+};
+
 exports.createStudent = async (req, res) => {
     const t = await sequelize.transaction();
     try {
@@ -26,7 +51,6 @@ exports.createStudent = async (req, res) => {
         const hashedPassword = bcrypt.hashSync(password, 8);
 
         // 3. Create Student in Admin DB
-        // New students are inactive by default and have no class assigned yet
         const student = await Student.create({
             nis,
             name,
@@ -81,7 +105,6 @@ exports.createStudent = async (req, res) => {
         }
 
         // 6. [INTEGRASI] Register Account to Auth Service
-        // Kita menggunakan mutation registerStudent yang baru ditambahkan di Auth Service
         try {
             const authResponse = await axios.post('http://auth-service:3001/graphql', {
                 query: `
@@ -93,36 +116,37 @@ exports.createStudent = async (req, res) => {
                     }
                 `,
                 variables: {
-                    nis: nis,             // Username di Auth
-                    password: password,   // Raw Password (biar Auth yang nge-hash ulang)
+                    nis: nis,             
+                    password: password,   
                     name: name
                 }
             });
 
-            // Cek jika GraphQL mengembalikan error (misal 200 OK tapi ada errors array)
             if (authResponse.data.errors) {
                 throw new Error('Auth Service Error: ' + authResponse.data.errors[0].message);
             }
 
         } catch (authError) {
             console.error("Failed to register to Auth Service:", authError.message);
-            // Lempar error agar ditangkap oleh catch utama dan memicu ROLLBACK
             throw new Error('Failed to register account in Auth Service. Transaction rolled back.');
         }
 
-        // 7. Commit Transaction (Semua sukses)
+        // 7. [BARU] Broadcast ke Service Lain (Student, Teacher, Parent)
+        // Dipanggil sebelum commit agar data siap di semua tempat
+        await broadcastToServices('CREATE', student.toJSON());
+
+        // 8. Commit Transaction (Semua sukses)
         await t.commit();
         
         res.status(201).json({ 
-            message: 'Student created successfully. Account registered & Initial bills generated.', 
+            message: 'Student created successfully. Account registered, bills generated, and data synced.', 
             data: { 
                 ...student.toJSON(), 
-                defaultPassword: password // Kembalikan password agar Admin bisa memberitahu siswa
+                defaultPassword: password 
             } 
         });
 
     } catch (error) {
-        // Jika ada error (Database error ATAU Auth Service error), batalkan semua perubahan DB
         await t.rollback();
         res.status(500).json({ message: error.message });
     }
@@ -132,7 +156,7 @@ exports.approveStudent = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { level } = req.body; // Target level (e.g., 7 for new students)
+        const { level } = req.body; 
 
         const student = await Student.findByPk(id, { transaction: t });
         if (!student) {
@@ -144,7 +168,6 @@ exports.approveStudent = async (req, res) => {
             return res.status(400).json({ message: 'Student is already active' });
         }
 
-        // Find available class for the level with locking
         const classes = await Class.findAll({
             where: { level },
             transaction: t,
@@ -157,9 +180,7 @@ exports.approveStudent = async (req, res) => {
                 where: { classId: cls.id, isActive: true },
                 transaction: t
             });
-            console.log(`Checking Class ${cls.name}: Capacity ${cls.capacity}, Current Count ${count}`);
-
-            // Use dynamic capacity from model (default usually 30)
+            
             const capacity = cls.capacity || 30; 
 
             if (count < capacity) {
@@ -178,7 +199,6 @@ exports.approveStudent = async (req, res) => {
             classId: assignedClass.id
         }, { transaction: t });
 
-        // Mark pending bills (Initial Uang Gedung & SPP) as Paid
         await Bill.update(
             { status: 'Paid', paidDate: new Date() },
             {
@@ -189,6 +209,10 @@ exports.approveStudent = async (req, res) => {
                 transaction: t
             }
         );
+
+        // [BARU] Broadcast Update ke Service Lain
+        // Penting agar Teacher Service tahu siswa ini masuk kelas mana
+        await broadcastToServices('UPDATE', student.toJSON());
 
         await t.commit();
         res.status(200).json({ message: `Student approved and assigned to class ${assignedClass.name}`, data: student });
@@ -240,6 +264,10 @@ exports.updateStudent = async (req, res) => {
         if (!student) return res.status(404).json({ message: 'Student not found' });
 
         await student.update({ name, classId, parentName, parentContact, parentEmail, address, isCatering });
+        
+        // [OPSIONAL] Broadcast Update (Jika ingin nama/data diri terupdate real-time di service lain)
+        // await broadcastToServices('UPDATE', student.toJSON());
+
         res.status(200).json({ message: 'Student updated successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -253,6 +281,8 @@ exports.deleteStudent = async (req, res) => {
         if (!student) return res.status(404).json({ message: 'Student not found' });
 
         await student.destroy();
+        // [OPSIONAL] Broadcast DELETE jika perlu
+        
         res.status(200).json({ message: 'Student deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -277,7 +307,6 @@ exports.promoteStudent = async (req, res) => {
         const currentLevel = student.Class.level;
         const nextLevel = currentLevel + 1;
 
-        // Find available class for the next level
         const classes = await Class.findAll({
             where: { level: nextLevel },
             transaction: t,
@@ -305,6 +334,10 @@ exports.promoteStudent = async (req, res) => {
         }
 
         await student.update({ classId: assignedClass.id }, { transaction: t });
+        
+        // [BARU] Broadcast Update kenaikan kelas
+        await broadcastToServices('UPDATE', student.toJSON());
+
         await t.commit();
 
         res.status(200).json({ message: `Student promoted to class ${assignedClass.name}` });
