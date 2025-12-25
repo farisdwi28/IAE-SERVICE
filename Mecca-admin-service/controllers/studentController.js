@@ -115,6 +115,35 @@ exports.createStudent = async (req, res) => {
             if (authResponse.data.errors) {
                 throw new Error('Auth Service Error: ' + authResponse.data.errors[0].message);
             }
+
+            if (parentEmail) {
+                const parentPassword = 'parent123'; // Default password untuk orang tua
+                console.log(`[AUTH] Registering Parent account for: ${parentEmail}`);
+
+                const parentAuth = await axios.post('http://auth-service:3001/graphql', {
+                    query: `
+                        mutation RegisterParent($email: String!, $password: String!, $name: String!) {
+                            registerParent(email: $email, password: $password, name: $name) {
+                                id
+                                email
+                            }
+                        }
+                    `,
+                    variables: {
+                        email: parentEmail,
+                        password: parentPassword,
+                        name: parentName || 'Orang Tua'
+                    }
+                });
+
+                // Kita HANYA Log Warning jika gagal (misal email sudah dipakai kakak kelas)
+                // Jangan throw Error agar proses create student tidak batal hanya karena parent sudah punya akun
+                if (parentAuth.data.errors) {
+                    console.warn('[AUTH WARN] Parent registration info:', parentAuth.data.errors[0].message);
+                } else {
+                    console.log('[AUTH SUCCESS] Parent account registered/verified.');
+                }
+            }
         } catch (authError) {
             console.error("Auth Service Failed:", authError.message);
             throw new Error('Gagal mendaftarkan akun di Auth Service. Transaksi dibatalkan.');
@@ -127,10 +156,11 @@ exports.createStudent = async (req, res) => {
         await t.commit();
         
         res.status(201).json({ 
-            message: 'Student created successfully. Account registered, bills generated, and synced.', 
+            message: 'Student created successfully. Account registered (Student & Parent), bills generated, and synced.', 
             data: { 
                 ...student.toJSON(), 
-                defaultPassword: password 
+                defaultPassword: password,
+                parentDefaultPassword: parentEmail ? 'parent123' : null
             } 
         });
 

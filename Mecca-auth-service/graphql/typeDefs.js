@@ -23,7 +23,13 @@ const typeDefs = gql`
     createdAt: String!
   }
 
-  union User = Admin | Student | Teacher
+  type Parent {
+    id: ID!
+    email: String!
+    name: String!
+  }
+
+  union User = Admin | Student | Teacher | Parent
 
   type AuthPayload {
     token: String!
@@ -66,6 +72,12 @@ const typeDefs = gql`
       password: String!
       name: String!
     ): Teacher
+
+    registerParent(
+      email: String!
+      password: String!
+      name: String!
+    ): Parent
 
     deleteUser(username: String!): String
   }

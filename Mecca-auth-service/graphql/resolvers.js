@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 // Import model yang tersedia (Perhatikan: Tidak ada model 'User')
-const { Admin, Student, Teacher } = require('../models');
+const { Admin, Student, Teacher, Parent } = require('../models');
 
 const generateToken = (user, role) => {
     return jwt.sign({ id: user.id, role: role }, process.env.JWT_SECRET, {
@@ -26,6 +26,8 @@ const resolvers = {
                 return await Student.findByPk(id);
             } else if (role === 'teacher') {
                 return await Teacher.findByPk(id);
+            } else if (role === 'parent') {
+                return await Parent.findByPk(id);
             }
 
             return null;
@@ -43,7 +45,7 @@ const resolvers = {
             } else if (role === 'teacher') {
                 user = await Teacher.findOne({ where: { nip: username } });
             } else if (role === 'parent') {
-                user = await Student.findOne({ where: { nis: username } });
+                user = await Parent.findOne({ where: { email: username } });
             } else {
                 throw new Error('Invalid role selected');
             }
@@ -114,6 +116,23 @@ const resolvers = {
             return teacher;
         },
 
+        registerParent: async (_, { email, password, name }) => {
+            const existing = await Parent.findOne({ where: { email } });
+            if (existing) {
+                // Jika email sudah ada, kita return data yang sudah ada saja (jangan error)
+                // Ini penting: karena kakak beradik orang tuanya sama.
+                return existing;
+            }
+
+            const hashedPassword = bcrypt.hashSync(password, 8);
+            const parent = await Parent.create({
+                email,
+                password: hashedPassword,
+                name
+            });
+            return parent;
+        },
+
         // --- BAGIAN YANG DIPERBAIKI ---
         deleteUser: async (_, { username }) => {
             try {
@@ -132,8 +151,11 @@ const resolvers = {
                 const adminDeleted = await Admin.destroy({ where: { username: username } });
                 if (adminDeleted) return "Admin deleted successfully";
 
+                const parentDeleted = await Parent.destroy({ where: { email: username } });
+                if (parentDeleted) return "parent deleted successfully";
+
                 // Jika tidak ada yang terhapus
-                throw new Error('User not found in any role (Student/Teacher/Admin)');
+                throw new Error('User not found in any role (Student/Teacher/Admin/Parent)');
 
             } catch (error) {
                 throw new Error(error.message);
@@ -151,6 +173,9 @@ const resolvers = {
             }
             if (obj.nip) {
                 return 'Teacher';
+            }
+            if (obj.email) {
+                return 'Parent';
             }
             return null;
         }
