@@ -1,48 +1,71 @@
 const { Student } = require('../models');
 
 exports.syncStudentData = async (req, res) => {
+    // Deklarasikan action di luar try agar bisa diakses di catch
+    let action = 'UNKNOWN'; 
+    
     try {
-        const { action, data } = req.body;
-        console.log(`[SYNC RECEIVED] Action: ${action} | Student: ${data.name}`);
+        // Ambil data dari body
+        const body = req.body;
+        if (body.action) action = body.action;
+        const data = body.data;
+
+        console.log(`[SYNC RECEIVED] Action: ${action} | Student ID: ${data?.id}`);
+
+        const studentPayload = {
+            id: data.id,
+            nis: data.nis,
+            name: data.name,
+            classId: data.classId,
+            parentName: data.parentName,
+            parentContact: data.parentContact,
+            parentEmail: data.parentEmail,
+            address: data.address,
+            isCatering: data.isCatering,
+            isActive: data.isActive,
+            // Password dummy biar gak error validasi
+            password: data.password || 'managed-by-admin-auth-service'
+        };
 
         if (action === 'CREATE') {
-            // Cek dulu apakah data sudah ada (idempotency)
             const existing = await Student.findByPk(data.id);
             if (!existing) {
-                await Student.create({
-                    id: data.id, // PENTING: Pakai ID dari Admin
-                    nis: data.nis,
-                    name: data.name,
-                    classId: data.classId,
-                    parentName: data.parentName,
-                    isActive: data.isActive
-                });
+                await Student.create(studentPayload);
+                console.log(`[SYNC SUCCESS] Created student ${data.id}`);
+            } else {
+                console.log(`[SYNC INFO] Student ${data.id} already exists, skipping create.`);
             }
         } else if (action === 'UPDATE') {
             const student = await Student.findByPk(data.id);
             if (student) {
-                await student.update({
-                    name: data.name,
-                    classId: data.classId,
-                    parentName: data.parentName,
-                    isActive: data.isActive
-                });
+                await student.update(studentPayload);
+                console.log(`[SYNC SUCCESS] Updated student ${data.id}`);
             } else {
-                // Jika update data tapi di sini belum ada, buat baru saja
-                await Student.create({
-                    id: data.id,
-                    nis: data.nis,
-                    name: data.name,
-                    classId: data.classId,
-                    parentName: data.parentName,
-                    isActive: data.isActive
-                });
+                // Self-healing: Create jika tidak ada
+                await Student.create(studentPayload);
+                console.log(`[SYNC SUCCESS] Created (via Update) student ${data.id}`);
+            }
+        } else if (action === 'DELETE') {
+            const student = await Student.findByPk(data.id);
+            if (student) {
+                // Gunakan force: true jika menggunakan paranoid (soft delete) tapi admin hard delete
+                // Tapi standard destroy sudah cukup jika settingan DB normal
+                await student.destroy();
+                console.log(`[SYNC SUCCESS] Deleted student ${data.id}`);
+            } else {
+                console.warn(`[SYNC WARN] Student ${data.id} not found, nothing to delete.`);
             }
         }
 
-        res.status(200).json({ message: 'Synchronization successful' });
+        res.status(200).json({ message: 'Sync processed successfully' });
+
     } catch (error) {
-        console.error('[SYNC ERROR]', error);
-        res.status(500).json({ message: error.message });
+        // Sekarang variabel action bisa diakses di sini
+        console.error(`[SYNC ERROR] Failed to process ${action}:`, error.message);
+        // Kirim detail error ke Admin biar ketahuan kenapa gagal
+        res.status(500).json({ 
+            message: 'Sync failed on receiver', 
+            error: error.message 
+        });
     }
 };
