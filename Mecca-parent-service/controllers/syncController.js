@@ -1,5 +1,6 @@
 const { Student } = require('../models');
 const { Class } = require('../models');
+const { Teacher } = require('../models');
 
 exports.syncStudentData = async (req, res) => {
     // Deklarasikan action di luar try agar bisa diakses di catch
@@ -119,6 +120,54 @@ exports.syncClass = async (req, res) => {
         res.status(200).json({ message: 'Sync Class Success' });
     } catch (error) {
         console.error('[SYNC CLASS ERROR]', error.message);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.syncTeacher = async (req, res) => {
+    const { action, data } = req.body;
+    
+    console.log(`[SYNC TEACHER] Action: ${action} | NIP: ${data.nip}`);
+
+    try {
+        // Payload sesuai data dari Admin
+        const teacherPayload = {
+            id: data.id, // Kita paksa ID sama agar relasi antar service aman
+            nip: data.nip,
+            name: data.name,
+            password: data.password, // Simpan password hash juga biar sinkron
+            subjectSpecialization: data.subjectSpecialization,
+            // Field lain jika ada (email, phone, dll) sesuaikan dengan model di service ini
+        };
+
+        switch (action) {
+            case 'CREATE':
+                const existing = await Teacher.findOne({ where: { nip: data.nip } });
+                if (!existing) {
+                    await Teacher.create(teacherPayload);
+                    console.log(`[SYNC SUCCESS] Created Teacher ${data.name}`);
+                } else {
+                    console.log(`[SYNC INFO] Teacher NIP ${data.nip} already exists.`);
+                }
+                break;
+
+            case 'UPDATE':
+                await Teacher.update(teacherPayload, { where: { id: data.id } });
+                console.log(`[SYNC SUCCESS] Updated Teacher ${data.name}`);
+                break;
+
+            case 'DELETE':
+                await Teacher.destroy({ where: { id: data.id } });
+                console.log(`[SYNC SUCCESS] Deleted Teacher ID ${data.id}`);
+                break;
+
+            default:
+                console.warn(`Unknown action: ${action}`);
+        }
+
+        res.status(200).json({ message: 'Sync Teacher processed' });
+    } catch (error) {
+        console.error('[SYNC TEACHER ERROR]', error.message);
         res.status(500).json({ error: error.message });
     }
 };
