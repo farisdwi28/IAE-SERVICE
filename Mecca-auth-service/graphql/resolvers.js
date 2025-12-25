@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+// Import model yang tersedia (Perhatikan: Tidak ada model 'User')
 const { Admin, Student, Teacher } = require('../models');
 
 const generateToken = (user, role) => {
@@ -81,8 +82,6 @@ const resolvers = {
             return admin;
         },
 
-        // --- TAMBAHAN BARU ---
-        
         registerStudent: async (_, { nis, password, name }) => {
             // Pastikan NIS belum terdaftar
             const existing = await Student.findOne({ where: { nis } });
@@ -113,6 +112,32 @@ const resolvers = {
                 name
             });
             return teacher;
+        },
+
+        // --- BAGIAN YANG DIPERBAIKI ---
+        deleteUser: async (_, { username }) => {
+            try {
+                // Karena kita tidak tahu 'username' ini milik siapa (Student/Teacher/Admin),
+                // Kita coba hapus satu per satu.
+                
+                // 1. Coba Hapus Student (NIS) - Ini prioritas karena request dari Admin Service pakai NIS
+                const studentDeleted = await Student.destroy({ where: { nis: username } });
+                if (studentDeleted) return "Student deleted successfully";
+
+                // 2. Coba Hapus Teacher (NIP)
+                const teacherDeleted = await Teacher.destroy({ where: { nip: username } });
+                if (teacherDeleted) return "Teacher deleted successfully";
+
+                // 3. Coba Hapus Admin (Username)
+                const adminDeleted = await Admin.destroy({ where: { username: username } });
+                if (adminDeleted) return "Admin deleted successfully";
+
+                // Jika tidak ada yang terhapus
+                throw new Error('User not found in any role (Student/Teacher/Admin)');
+
+            } catch (error) {
+                throw new Error(error.message);
+            }
         }
     },
 

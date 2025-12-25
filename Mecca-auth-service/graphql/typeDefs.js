@@ -66,6 +66,8 @@ const typeDefs = gql`
       password: String!
       name: String!
     ): Teacher
+
+    deleteUser(username: String!): String
   }
 `;
 
