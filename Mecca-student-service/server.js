@@ -21,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.post('/api/sync/students', syncController.syncStudentData);
 app.post('/api/sync/classes', syncController.syncClass);
 app.post('/api/sync/teachers', syncController.syncTeacher);
+app.post('/api/sync/subjects', syncController.syncSubject);
 
 // Routes
 app.use('/api/student', studentRoutes);
