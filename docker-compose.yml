@@ -1,0 +1,100 @@
+version: "3.8"
+
+services:
+  # -----------------------------------------------------------------
+  # SERVICE 1: AUTH (Port 3001)
+  # Menangani Login, Register Admin, GraphQL Mutations/Queries
+  # -----------------------------------------------------------------
+  auth-service:
+    container_name: mecca_auth
+    build: ./Mecca-auth-service
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./Mecca-auth-service/.env
+    environment:
+      - PORT=3001
+    networks:
+      - mecca-network
+
+  # -----------------------------------------------------------------
+  # SERVICE 2: ADMIN (Port 3002)
+  # Menangani Data Master (Siswa, Guru, Kelas, Jadwal, Tagihan, Buku)
+  # -----------------------------------------------------------------
+  admin-service:
+    container_name: mecca_admin
+    build: ./Mecca-admin-service
+    restart: always
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./Mecca-admin-service/.env
+    environment:
+      - PORT=3002
+    depends_on:
+      - auth-service
+    networks:
+      - mecca-network
+
+  # -----------------------------------------------------------------
+  # SERVICE 3: STUDENT (Port 3003)
+  # Menangani Profile Siswa, Nilai, Absensi, Peminjaman Buku
+  # -----------------------------------------------------------------
+  student-service:
+    container_name: mecca_student
+    build: ./Mecca-student-service
+    restart: always
+    ports:
+      - "3003:3003"
+    env_file:
+      - ./Mecca-student-service/.env
+    environment:
+      - PORT=3003
+    depends_on:
+      - auth-service
+    networks:
+      - mecca-network
+
+  # -----------------------------------------------------------------
+  # SERVICE 4: TEACHER (Port 3004)
+  # Menangani Input Nilai, Absensi Siswa, Jadwal Mengajar
+  # -----------------------------------------------------------------
+  teacher-service:
+    container_name: mecca_teacher
+    build: ./Mecca-teacher-service
+    restart: always
+    ports:
+      - "3004:3004"
+    env_file:
+      - ./Mecca-teacher-service/.env
+    environment:
+      - PORT=3004
+    depends_on:
+      - auth-service
+    networks:
+      - mecca-network
+
+  # -----------------------------------------------------------------
+  # SERVICE 5: PARENT (Port 3005)
+  # Menangani Monitoring Anak (Absensi, Tagihan, Katering)
+  # -----------------------------------------------------------------
+  parent-service:
+    container_name: mecca_parent
+    build: ./Mecca-parent-service
+    restart: always
+    ports:
+      - "3005:3005"
+    env_file:
+      - ./Mecca-parent-service/.env
+    environment:
+      - PORT=3005
+    depends_on:
+      - auth-service
+    networks:
+      - mecca-network
+
+# Network agar semua service bisa saling komunikasi
+networks:
+  mecca-network:
+    driver: bridge

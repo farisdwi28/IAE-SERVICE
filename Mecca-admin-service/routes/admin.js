@@ -13,83 +13,168 @@ const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 // Middleware to protect all admin routes
 router.use(verifyToken, checkRole(['admin']));
 
+/**
+ * @swagger
+ * components:
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ *
+ *   schemas:
+ *     Student:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         name:
+ *           type: string
+ *         dob:
+ *           type: string
+ *           format: date
+ *         parentName:
+ *           type: string
+ *         parentContact:
+ *           type: string
+ *         parentEmail:
+ *           type: string
+ *         address:
+ *           type: string
+ *         isCatering:
+ *           type: boolean
+ *
+ *     StudentCreate:
+ *       type: object
+ *       required: [name, parentName, parentContact]
+ *       properties:
+ *         name:
+ *           type: string
+ *         dob:
+ *           type: string
+ *           format: date
+ *         parentName:
+ *           type: string
+ *         parentContact:
+ *           type: string
+ *         parentEmail:
+ *           type: string
+ *         address:
+ *           type: string
+ *         isCatering:
+ *           type: boolean
+ *
+ *     Teacher:
+ *       type: object
+ *       properties:
+ *         name:
+ *           type: string
+ *         nip:
+ *           type: string
+ *         email:
+ *           type: string
+ *
+ *     Class:
+ *       type: object
+ *       required: [name, level]
+ *       properties:
+ *         name:
+ *           type: string
+ *         level:
+ *           type: integer
+ *
+ *     Subject:
+ *       type: object
+ *       required: [name]
+ *       properties:
+ *         name:
+ *           type: string
+ *
+ *     Schedule:
+ *       type: object
+ *       properties:
+ *         classId:
+ *           type: integer
+ *         subjectId:
+ *           type: integer
+ *         teacherId:
+ *           type: integer
+ *         day:
+ *           type: string
+ *         startTime:
+ *           type: string
+ *           example: "08:00"
+ *         endTime:
+ *           type: string
+ *           example: "09:30"
+ *
+ *     Fee:
+ *       type: object
+ *       required: [name, amount]
+ *       properties:
+ *         name:
+ *           type: string
+ *         amount:
+ *           type: number
+ */
+
+
 // Students
 /**
  * @swagger
  * /students:
- *   post:
- *     summary: Create a new student
+ *   get:
  *     tags: [Students]
+ *     summary: Get all students
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: search
+ *         description: Search by name or NIS
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: List of students
+ */
+router.get('/students', studentController.getAllStudents);
+
+/**
+ * @swagger
+ * /students:
+ *   post:
+ *     tags: [Students]
+ *     summary: Create new student
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Student'
+ *             $ref: '#/components/schemas/StudentCreate'
  *     responses:
  *       201:
- *         description: Student created successfully
- *       500:
- *         description: Server error
+ *         description: Student created
  */
 router.post('/students', studentController.createStudent);
-/**
- * @swagger
- * /students:
- *   get:
- *     summary: Get all students with pagination and search
- *     tags: [Students]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of items per page
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search by name or NIS
- *     responses:
- *       200:
- *         description: List of students
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalItems:
- *                   type: integer
- *                 totalPages:
- *                   type: integer
- *                 currentPage:
- *                   type: integer
- *                 students:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Student'
- *       500:
- *         description: Server error
- */
-router.get('/students', studentController.getAllStudents);
+
 /**
  * @swagger
  * /students/{id}:
  *   put:
- *     summary: Update a student
  *     tags: [Students]
+ *     summary: Update student
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Student ID
+ *         schema: { type: integer }
  *     requestBody:
  *       required: true
  *       content:
@@ -98,66 +183,61 @@ router.get('/students', studentController.getAllStudents);
  *             $ref: '#/components/schemas/Student'
  *     responses:
  *       200:
- *         description: Student updated successfully
+ *         description: Student updated
  *       404:
  *         description: Student not found
- *       500:
- *         description: Server error
  */
 router.put('/students/:id', studentController.updateStudent);
+
 /**
  * @swagger
  * /students/{id}:
  *   delete:
- *     summary: Delete a student
  *     tags: [Students]
+ *     summary: Delete student
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Student ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Student deleted successfully
+ *         description: Student deleted
  *       404:
  *         description: Student not found
- *       500:
- *         description: Server error
  */
 router.delete('/students/:id', studentController.deleteStudent);
+
 /**
  * @swagger
  * /students/{id}/approve:
  *   post:
- *     summary: Approve a student registration
  *     tags: [Students]
+ *     summary: Approve student and assign class
+ *     description: Approve student registration and automatically assign class based on level
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Student ID
+ *         schema: { type: integer }
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - classId
+ *             required: [level]
  *             properties:
- *               classId:
+ *               level:
  *                 type: integer
+ *                 example: 7
  *     responses:
  *       200:
  *         description: Student approved
  *       404:
  *         description: Student not found
- *       500:
- *         description: Server error
  */
 router.post('/students/:id/approve', studentController.approveStudent);
 
@@ -165,22 +245,19 @@ router.post('/students/:id/approve', studentController.approveStudent);
  * @swagger
  * /students/{id}/promote:
  *   post:
- *     summary: Promote a student to the next grade
  *     tags: [Students]
+ *     summary: Promote student to next grade
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Student ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Student promoted
  *       404:
  *         description: Student not found
- *       500:
- *         description: Server error
  */
 router.post('/students/:id/promote', studentController.promoteStudent);
 
@@ -188,9 +265,33 @@ router.post('/students/:id/promote', studentController.promoteStudent);
 /**
  * @swagger
  * /teachers:
- *   post:
- *     summary: Create a new teacher
+ *   get:
  *     tags: [Teachers]
+ *     summary: Get all teachers
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: List of teachers
+ */
+router.get('/teachers', teacherController.getAllTeachers);
+
+/**
+ * @swagger
+ * /teachers:
+ *   post:
+ *     tags: [Teachers]
+ *     summary: Create teacher
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
@@ -199,68 +300,22 @@ router.post('/students/:id/promote', studentController.promoteStudent);
  *             $ref: '#/components/schemas/Teacher'
  *     responses:
  *       201:
- *         description: Teacher created successfully
- *       500:
- *         description: Server error
+ *         description: Teacher created
  */
 router.post('/teachers', teacherController.createTeacher);
-/**
- * @swagger
- * /teachers:
- *   get:
- *     summary: Get all teachers with pagination and search
- *     tags: [Teachers]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *         description: Page number
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of items per page
- *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search by name or NIP
- *     responses:
- *       200:
- *         description: List of teachers
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalItems:
- *                   type: integer
- *                 totalPages:
- *                   type: integer
- *                 currentPage:
- *                   type: integer
- *                 teachers:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Teacher'
- *       500:
- *         description: Server error
- */
-router.get('/teachers', teacherController.getAllTeachers);
+
 /**
  * @swagger
  * /teachers/{id}:
  *   put:
- *     summary: Update a teacher
  *     tags: [Teachers]
+ *     summary: Update teacher
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Teacher ID
+ *         schema: { type: integer }
  *     requestBody:
  *       required: true
  *       content:
@@ -272,8 +327,6 @@ router.get('/teachers', teacherController.getAllTeachers);
  *         description: Teacher updated
  *       404:
  *         description: Teacher not found
- *       500:
- *         description: Server error
  */
 router.put('/teachers/:id', teacherController.updateTeacher);
 
@@ -281,22 +334,19 @@ router.put('/teachers/:id', teacherController.updateTeacher);
  * @swagger
  * /teachers/{id}:
  *   delete:
- *     summary: Delete a teacher
  *     tags: [Teachers]
+ *     summary: Delete teacher
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Teacher ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Teacher deleted
  *       404:
  *         description: Teacher not found
- *       500:
- *         description: Server error
  */
 router.delete('/teachers/:id', teacherController.deleteTeacher);
 
@@ -304,80 +354,55 @@ router.delete('/teachers/:id', teacherController.deleteTeacher);
 /**
  * @swagger
  * /classes:
- *   post:
- *     summary: Create a new class
- *     tags: [Classes]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - level
- *             properties:
- *               name:
- *                 type: string
- *               level:
- *                 type: integer
- *     responses:
- *       201:
- *         description: Class created
- *       500:
- *         description: Server error
- */
-router.post('/classes', classController.createClass);
-
-/**
- * @swagger
- * /classes:
  *   get:
- *     summary: Get all classes
  *     tags: [Classes]
+ *     summary: Get all classes
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: List of classes
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Class'
- *       500:
- *         description: Server error
  */
 router.get('/classes', classController.getAllClasses);
 
 /**
  * @swagger
- * /classes/{id}:
- *   put:
- *     summary: Update a class
+ * /classes:
+ *   post:
  *     tags: [Classes]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Class ID
+ *     summary: Create class
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               level:
- *                 type: integer
+ *             $ref: '#/components/schemas/Class'
+ *     responses:
+ *       201:
+ *         description: Class created
+ */
+router.post('/classes', classController.createClass);
+
+/**
+ * @swagger
+ * /classes/{id}:
+ *   put:
+ *     tags: [Classes]
+ *     summary: Update class
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Class'
  *     responses:
  *       200:
  *         description: Class updated
- *       500:
- *         description: Server error
  */
 router.put('/classes/:id', classController.updateClass);
 
@@ -385,20 +410,17 @@ router.put('/classes/:id', classController.updateClass);
  * @swagger
  * /classes/{id}:
  *   delete:
- *     summary: Delete a class
  *     tags: [Classes]
+ *     summary: Delete class
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Class ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Class deleted
- *       500:
- *         description: Server error
  */
 router.delete('/classes/:id', classController.deleteClass);
 
@@ -406,75 +428,54 @@ router.delete('/classes/:id', classController.deleteClass);
 /**
  * @swagger
  * /subjects:
- *   post:
- *     summary: Create a new subject
- *     tags: [Subjects]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *     responses:
- *       201:
- *         description: Subject created
- *       500:
- *         description: Server error
- */
-router.post('/subjects', subjectController.createSubject);
-
-/**
- * @swagger
- * /subjects:
  *   get:
- *     summary: Get all subjects
  *     tags: [Subjects]
+ *     summary: Get all subjects
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: List of subjects
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Subject'
- *       500:
- *         description: Server error
  */
 router.get('/subjects', subjectController.getAllSubjects);
 
 /**
  * @swagger
+ * /subjects:
+ *   post:
+ *     tags: [Subjects]
+ *     summary: Create subject
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Subject'
+ *     responses:
+ *       201:
+ *         description: Subject created
+ */
+router.post('/subjects', subjectController.createSubject);
+
+/**
+ * @swagger
  * /subjects/{id}:
  *   put:
- *     summary: Update a subject
  *     tags: [Subjects]
+ *     summary: Update subject
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Subject ID
+ *         schema: { type: integer }
  *     requestBody:
- *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
+ *             $ref: '#/components/schemas/Subject'
  *     responses:
  *       200:
  *         description: Subject updated
- *       500:
- *         description: Server error
  */
 router.put('/subjects/:id', subjectController.updateSubject);
 
@@ -482,20 +483,17 @@ router.put('/subjects/:id', subjectController.updateSubject);
  * @swagger
  * /subjects/{id}:
  *   delete:
- *     summary: Delete a subject
  *     tags: [Subjects]
+ *     summary: Delete subject
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Subject ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Subject deleted
- *       500:
- *         description: Server error
  */
 router.delete('/subjects/:id', subjectController.deleteSubject);
 
@@ -503,11 +501,31 @@ router.delete('/subjects/:id', subjectController.deleteSubject);
 /**
  * @swagger
  * /schedules:
- *   post:
- *     summary: Create a new schedule
+ *   get:
  *     tags: [Schedules]
+ *     summary: Get schedules
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: teacherId
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: List of schedules
+ */
+router.get('/schedules', scheduleController.getAllSchedules);
+
+/**
+ * @swagger
+ * /schedules:
+ *   post:
+ *     tags: [Schedules]
+ *     summary: Create schedule
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
- *       required: true
  *       content:
  *         application/json:
  *           schema:
@@ -515,57 +533,22 @@ router.delete('/subjects/:id', subjectController.deleteSubject);
  *     responses:
  *       201:
  *         description: Schedule created
- *       500:
- *         description: Server error
  */
 router.post('/schedules', scheduleController.createSchedule);
 
 /**
  * @swagger
- * /schedules:
- *   get:
- *     summary: Get all schedules
- *     tags: [Schedules]
- *     parameters:
- *       - in: query
- *         name: classId
- *         schema:
- *           type: integer
- *         description: Filter by class ID
- *       - in: query
- *         name: teacherId
- *         schema:
- *           type: integer
- *         description: Filter by teacher ID
- *     responses:
- *       200:
- *         description: List of schedules
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Schedule'
- *       500:
- *         description: Server error
- */
-router.get('/schedules', scheduleController.getAllSchedules);
-
-/**
- * @swagger
  * /schedules/{id}:
  *   put:
- *     summary: Update a schedule
  *     tags: [Schedules]
+ *     summary: Update schedule
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Schedule ID
+ *         schema: { type: integer }
  *     requestBody:
- *       required: true
  *       content:
  *         application/json:
  *           schema:
@@ -573,8 +556,6 @@ router.get('/schedules', scheduleController.getAllSchedules);
  *     responses:
  *       200:
  *         description: Schedule updated
- *       500:
- *         description: Server error
  */
 router.put('/schedules/:id', scheduleController.updateSchedule);
 
@@ -582,20 +563,17 @@ router.put('/schedules/:id', scheduleController.updateSchedule);
  * @swagger
  * /schedules/{id}:
  *   delete:
- *     summary: Delete a schedule
  *     tags: [Schedules]
+ *     summary: Delete schedule
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Schedule ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Schedule deleted
- *       500:
- *         description: Server error
  */
 router.delete('/schedules/:id', scheduleController.deleteSchedule);
 
@@ -603,13 +581,12 @@ router.delete('/schedules/:id', scheduleController.deleteSchedule);
  * @swagger
  * /schedules:
  *   delete:
- *     summary: Delete all schedules
  *     tags: [Schedules]
+ *     summary: Delete all schedules
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: All schedules deleted
- *       500:
- *         description: Server error
  */
 router.delete('/schedules', scheduleController.deleteAllSchedules);
 
@@ -617,13 +594,12 @@ router.delete('/schedules', scheduleController.deleteAllSchedules);
  * @swagger
  * /schedules/auto-generate:
  *   post:
- *     summary: Auto-generate schedules
  *     tags: [Schedules]
+ *     summary: Auto generate schedules
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: Schedules generated
- *       500:
- *         description: Server error
  */
 router.post('/schedules/auto-generate', scheduleController.autoGenerateSchedule);
 
@@ -631,80 +607,56 @@ router.post('/schedules/auto-generate', scheduleController.autoGenerateSchedule)
 /**
  * @swagger
  * /fees:
- *   post:
- *     summary: Create a new fee type
- *     tags: [Fees]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - amount
- *             properties:
- *               name:
- *                 type: string
- *               amount:
- *                 type: number
- *     responses:
- *       201:
- *         description: Fee created
- *       500:
- *         description: Server error
- */
-router.post('/fees', feeController.createFee);
-
-/**
- * @swagger
- * /fees:
  *   get:
- *     summary: Get all fees
  *     tags: [Fees]
+ *     summary: Get all fees
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
  *         description: List of fees
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Fee'
- *       500:
- *         description: Server error
  */
 router.get('/fees', feeController.getAllFees);
 
 /**
  * @swagger
- * /fees/{id}:
- *   put:
- *     summary: Update a fee
+ * /fees:
+ *   post:
  *     tags: [Fees]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: Fee ID
+ *     summary: Create fee
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               amount:
- *                 type: number
+ *             $ref: '#/components/schemas/Fee'
+ *     responses:
+ *       201:
+ *         description: Fee created
+ */
+router.post('/fees', feeController.createFee);
+
+/**
+ * @swagger
+ * /fees/{id}:
+ *   put:
+ *     tags: [Fees]
+ *     summary: Update fee
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Fee'
  *     responses:
  *       200:
  *         description: Fee updated
- *       500:
- *         description: Server error
  */
 router.put('/fees/:id', feeController.updateFee);
 
@@ -712,20 +664,17 @@ router.put('/fees/:id', feeController.updateFee);
  * @swagger
  * /fees/{id}:
  *   delete:
- *     summary: Delete a fee
  *     tags: [Fees]
+ *     summary: Delete fee
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Fee ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Fee deleted
- *       500:
- *         description: Server error
  */
 router.delete('/fees/:id', feeController.deleteFee);
 
@@ -734,71 +683,45 @@ router.delete('/fees/:id', feeController.deleteFee);
  * @swagger
  * /bills:
  *   get:
- *     summary: Get all bills with pagination and search
  *     tags: [Bills]
+ *     summary: Get all bills
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
  *         name: page
- *         schema:
- *           type: integer
- *         description: Page number
+ *         schema: { type: integer }
  *       - in: query
  *         name: limit
- *         schema:
- *           type: integer
- *         description: Number of items per page
+ *         schema: { type: integer }
  *       - in: query
  *         name: search
- *         schema:
- *           type: string
- *         description: Search by bill number
+ *         schema: { type: string }
  *       - in: query
  *         name: nis
- *         schema:
- *           type: string
- *         description: Filter by Student NIS
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: List of bills
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalItems:
- *                   type: integer
- *                 totalPages:
- *                   type: integer
- *                 currentPage:
- *                   type: integer
- *                 bills:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Bill'
- *       500:
- *         description: Server error
  */
 router.get('/bills', billController.getAllBills);
+
 /**
  * @swagger
  * /bills/{id}/pay:
  *   put:
- *     summary: Mark a bill as paid
  *     tags: [Bills]
+ *     summary: Mark bill as paid
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Bill ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Bill marked as paid
  *       404:
  *         description: Bill not found
- *       500:
- *         description: Server error
  */
 router.put('/bills/:id/pay', billController.markBillAsPaid);
 
@@ -806,22 +729,19 @@ router.put('/bills/:id/pay', billController.markBillAsPaid);
  * @swagger
  * /bills/{id}/remind:
  *   post:
- *     summary: Send payment reminder email
  *     tags: [Bills]
+ *     summary: Send bill payment reminder
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         schema:
- *           type: integer
- *         description: Bill ID
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Reminder sent
  *       404:
  *         description: Bill not found
- *       500:
- *         description: Server error
  */
 router.post('/bills/:id/remind', billController.sendBillReminder);
 
@@ -830,13 +750,12 @@ router.post('/bills/:id/remind', billController.sendBillReminder);
  * @swagger
  * /notifications/check-fees:
  *   post:
- *     summary: Manually trigger fee check notifications
  *     tags: [Notifications]
+ *     summary: Trigger fee check notifications
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: Fee checks triggered
- *       500:
- *         description: Server error
+ *         description: Fee notifications triggered
  */
 router.post('/notifications/check-fees', notificationController.triggerFeeChecks);
 
@@ -844,13 +763,12 @@ router.post('/notifications/check-fees', notificationController.triggerFeeChecks
  * @swagger
  * /notifications/check-library:
  *   post:
- *     summary: Manually trigger library overdue notifications
  *     tags: [Notifications]
+ *     summary: Trigger library overdue notifications
+ *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: Library checks triggered
- *       500:
- *         description: Server error
+ *         description: Library notifications triggered
  */
 router.post('/notifications/check-library', notificationController.triggerLibraryChecks);
 
@@ -858,16 +776,16 @@ router.post('/notifications/check-library', notificationController.triggerLibrar
  * @swagger
  * /notifications/test-email:
  *   post:
- *     summary: Send a test email
  *     tags: [Notifications]
+ *     summary: Send test email
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - to
+ *             required: [to]
  *             properties:
  *               to:
  *                 type: string
@@ -875,8 +793,6 @@ router.post('/notifications/check-library', notificationController.triggerLibrar
  *     responses:
  *       200:
  *         description: Test email sent
- *       500:
- *         description: Server error
  */
 router.post('/notifications/test-email', notificationController.sendTestEmail);
 

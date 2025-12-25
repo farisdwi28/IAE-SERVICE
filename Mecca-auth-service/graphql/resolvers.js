@@ -73,14 +73,46 @@ const resolvers = {
 
         registerAdmin: async (_, { username, password, name }) => {
             const hashedPassword = bcrypt.hashSync(password, 8);
-
             const admin = await Admin.create({
                 username,
                 password: hashedPassword,
                 name
             });
-
             return admin;
+        },
+
+        // --- TAMBAHAN BARU ---
+        
+        registerStudent: async (_, { nis, password, name }) => {
+            // Pastikan NIS belum terdaftar
+            const existing = await Student.findOne({ where: { nis } });
+            if (existing) {
+                throw new Error('NIS already registered');
+            }
+
+            const hashedPassword = bcrypt.hashSync(password, 8);
+            const student = await Student.create({
+                nis,
+                password: hashedPassword,
+                name
+                // Field lain di Auth Service biasanya opsional atau null
+            });
+            return student;
+        },
+
+        registerTeacher: async (_, { nip, password, name }) => {
+            const existing = await Teacher.findOne({ where: { nip } });
+            if (existing) {
+                throw new Error('NIP already registered');
+            }
+
+            const hashedPassword = bcrypt.hashSync(password, 8);
+            const teacher = await Teacher.create({
+                nip,
+                password: hashedPassword,
+                name
+            });
+            return teacher;
         }
     },
 

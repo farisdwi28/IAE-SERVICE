@@ -54,6 +54,18 @@ const typeDefs = gql`
       password: String!
       name: String!
     ): Admin!
+
+    registerStudent(
+      nis: String!
+      password: String!
+      name: String!
+    ): Student
+    
+    registerTeacher(
+      nip: String!
+      password: String!
+      name: String!
+    ): Teacher
   }
 `;
 

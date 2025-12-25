@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const axios = require('axios');
 const { Student, Class, Fee, Bill, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
@@ -15,14 +16,16 @@ exports.createStudent = async (req, res) => {
     try {
         const { name, dob, parentName, parentContact, parentEmail, address, isCatering } = req.body;
 
-        // Auto-generate NIS (Simple logic: Year + Random 4 digits)
+        // 1. Auto-generate NIS (Simple logic: Year + Random 4 digits)
         const year = new Date().getFullYear();
         const random = Math.floor(1000 + Math.random() * 9000);
         const nis = `${year}${random}`;
 
+        // 2. Generate Password (Raw for Auth Service, Hashed for Admin DB)
         const password = generatePassword(dob);
         const hashedPassword = bcrypt.hashSync(password, 8);
 
+        // 3. Create Student in Admin DB
         // New students are inactive by default and have no class assigned yet
         const student = await Student.create({
             nis,
@@ -41,7 +44,7 @@ exports.createStudent = async (req, res) => {
         const currentMonth = new Date().getMonth() + 1;
         const currentYear = new Date().getFullYear();
 
-        // 1. Uang Gedung (One-time)
+        // 4. Uang Gedung (One-time)
         const buildingFee = await Fee.findOne({ where: { name: 'Uang Gedung' }, transaction: t });
         if (buildingFee) {
             const dueDate = new Date();
@@ -59,7 +62,7 @@ exports.createStudent = async (req, res) => {
             }, { transaction: t });
         }
 
-        // 4. Create Initial SPP Bill (Pending)
+        // 5. Create Initial SPP Bill (Pending)
         const sppFee = await Fee.findOne({ where: { name: 'SPP' }, transaction: t });
         if (sppFee) {
             const dueDate = new Date();
@@ -77,9 +80,49 @@ exports.createStudent = async (req, res) => {
             }, { transaction: t });
         }
 
+        // 6. [INTEGRASI] Register Account to Auth Service
+        // Kita menggunakan mutation registerStudent yang baru ditambahkan di Auth Service
+        try {
+            const authResponse = await axios.post('http://auth-service:3001/graphql', {
+                query: `
+                    mutation RegisterStudent($nis: String!, $password: String!, $name: String!) {
+                        registerStudent(nis: $nis, password: $password, name: $name) {
+                            id
+                            nis
+                        }
+                    }
+                `,
+                variables: {
+                    nis: nis,             // Username di Auth
+                    password: password,   // Raw Password (biar Auth yang nge-hash ulang)
+                    name: name
+                }
+            });
+
+            // Cek jika GraphQL mengembalikan error (misal 200 OK tapi ada errors array)
+            if (authResponse.data.errors) {
+                throw new Error('Auth Service Error: ' + authResponse.data.errors[0].message);
+            }
+
+        } catch (authError) {
+            console.error("Failed to register to Auth Service:", authError.message);
+            // Lempar error agar ditangkap oleh catch utama dan memicu ROLLBACK
+            throw new Error('Failed to register account in Auth Service. Transaction rolled back.');
+        }
+
+        // 7. Commit Transaction (Semua sukses)
         await t.commit();
-        res.status(201).json({ message: 'Student created successfully. Initial bills generated. Please upload payment proof to activate.', data: { ...student.toJSON(), defaultPassword: password } });
+        
+        res.status(201).json({ 
+            message: 'Student created successfully. Account registered & Initial bills generated.', 
+            data: { 
+                ...student.toJSON(), 
+                defaultPassword: password // Kembalikan password agar Admin bisa memberitahu siswa
+            } 
+        });
+
     } catch (error) {
+        // Jika ada error (Database error ATAU Auth Service error), batalkan semua perubahan DB
         await t.rollback();
         res.status(500).json({ message: error.message });
     }
@@ -116,8 +159,10 @@ exports.approveStudent = async (req, res) => {
             });
             console.log(`Checking Class ${cls.name}: Capacity ${cls.capacity}, Current Count ${count}`);
 
-            // Use dynamic capacity from model
-            if (count < cls.capacity) {
+            // Use dynamic capacity from model (default usually 30)
+            const capacity = cls.capacity || 30; 
+
+            if (count < capacity) {
                 assignedClass = cls;
                 break;
             }
@@ -245,7 +290,10 @@ exports.promoteStudent = async (req, res) => {
                 where: { classId: cls.id, isActive: true },
                 transaction: t
             });
-            if (count < cls.capacity) {
+            
+            const capacity = cls.capacity || 30;
+
+            if (count < capacity) {
                 assignedClass = cls;
                 break;
             }
