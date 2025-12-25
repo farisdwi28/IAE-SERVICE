@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const sequelize = require('./config/database');
 const parentRoutes = require('./routes/parent');
+const syncController = require('./controllers/syncController');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -17,6 +18,8 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 app.use(express.urlencoded({ extended: true }));
+
+app.post('/api/sync/students', syncController.syncStudentData);
 
 // Routes
 app.use('/api/parent', parentRoutes);

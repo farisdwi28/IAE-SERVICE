@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const sequelize = require('./config/database');
 const studentRoutes = require('./routes/student');
+const syncController = require('./controllers/syncController');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -16,6 +17,8 @@ app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.post('/api/sync/students', syncController.syncStudentData);
 
 // Routes
 app.use('/api/student', studentRoutes);
