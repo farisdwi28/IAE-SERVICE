@@ -22,6 +22,7 @@ app.post('/api/sync/students', syncController.syncStudentData);
 app.post('/api/sync/classes', syncController.syncClass);
 app.post('/api/sync/teachers', syncController.syncTeacher);
 app.post('/api/sync/subjects', syncController.syncSubject);
+app.post('/api/sync/schedules', syncController.syncSchedule);
 
 // Routes
 app.use('/api/teacher', teacherRoutes);

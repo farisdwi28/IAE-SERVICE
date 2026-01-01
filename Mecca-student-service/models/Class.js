@@ -15,6 +15,11 @@ const Class = sequelize.define('Class', {
     level: {
         type: DataTypes.INTEGER, // e.g., 7, 8, 9
         allowNull: false
+    },
+    capacity: {
+        type: DataTypes.INTEGER,
+        defaultValue: 30,
+        allowNull: false
     }
 }, {
     timestamps: true,

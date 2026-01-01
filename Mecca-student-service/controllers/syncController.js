@@ -2,6 +2,7 @@ const { Student } = require('../models');
 const { Class } = require('../models');
 const { Teacher } = require('../models');
 const { Subject } = require('../models');
+const { Schedule } = require('../models');
 
 exports.syncStudentData = async (req, res) => {
     // Deklarasikan action di luar try agar bisa diakses di catch
@@ -202,6 +203,42 @@ exports.syncSubject = async (req, res) => {
         res.status(200).json({ message: 'Sync Subject OK' });
     } catch (error) {
         console.error('[SYNC SUBJECT ERROR]', error.message);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+exports.syncSchedule = async (req, res) => {
+    const { action, data } = req.body;
+    console.log(`[SYNC SCHEDULE] Action: ${action} | ID: ${data.id}`);
+
+    try {
+        const payload = {
+            id: data.id,
+            day: data.day,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            classId: data.classId,
+            subjectId: data.subjectId,
+            teacherId: data.teacherId
+        };
+
+        if (action === 'CREATE') {
+            const exists = await Schedule.findByPk(data.id);
+            if (!exists) {
+                await Schedule.create(payload);
+            }
+        } else if (action === 'UPDATE') {
+            const exists = await Schedule.findByPk(data.id);
+            if (exists) {
+                await exists.update(payload);
+            }
+        } else if (action === 'DELETE') {
+            await Schedule.destroy({ where: { id: data.id } });
+        }
+
+        res.status(200).json({ message: 'Sync Schedule OK' });
+    } catch (error) {
+        console.error('[SYNC SCHEDULE ERROR]', error.message);
         res.status(500).json({ error: error.message });
     }
 };

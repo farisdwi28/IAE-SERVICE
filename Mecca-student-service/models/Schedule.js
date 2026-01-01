@@ -8,6 +8,7 @@ const Schedule = sequelize.define('Schedule', {
         autoIncrement: true
     },
     day: {
+        // Sesuaikan dengan kebutuhan, bisa ENUM atau STRING biasa
         type: DataTypes.ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'),
         allowNull: false
     },
@@ -17,6 +18,19 @@ const Schedule = sequelize.define('Schedule', {
     },
     endTime: {
         type: DataTypes.TIME,
+        allowNull: false
+    },
+    // Kita definisikan Foreign Key di sini juga agar jelas
+    classId: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    },
+    subjectId: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    },
+    teacherId: {
+        type: DataTypes.INTEGER,
         allowNull: false
     }
 }, {

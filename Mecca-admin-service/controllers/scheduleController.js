@@ -1,38 +1,69 @@
 const { Schedule, Class, Subject, Teacher } = require('../models');
 const { Op } = require('sequelize');
+const axios = require('axios');
+
+// ==========================================
+// HELPER: BROADCAST SYNC
+// ==========================================
+const broadcastSchedule = async (action, data) => {
+    const services = [
+        'http://student-service:3003/api/sync/schedules',
+        'http://teacher-service:3004/api/sync/schedules',
+        'http://parent-service:3005/api/sync/schedules'
+    ];
+
+    console.log(`[BROADCAST] Sending ${action} Schedule ID ${data.id || 'Batch'}...`);
+
+    const requests = services.map(url => 
+        axios.post(url, { action, data })
+            .catch(err => console.error(`[BROADCAST FAIL] ${url}: ${err.message}`))
+    );
+
+    await Promise.all(requests);
+};
+
+// ==========================================
+// CONTROLLER METHODS
+// ==========================================
 
 exports.createSchedule = async (req, res) => {
     try {
         const { day, startTime, endTime, classId, subjectId, teacherId } = req.body;
 
-        // Basic validation: Check for conflicts
+        // 1. Conflict Detection (Logic Kamu)
         const conflict = await Schedule.findOne({
             where: {
                 day,
                 [Op.or]: [
-                    {
-                        startTime: { [Op.between]: [startTime, endTime] }
-                    },
-                    {
-                        endTime: { [Op.between]: [startTime, endTime] }
-                    }
+                    { startTime: { [Op.between]: [startTime, endTime] } },
+                    { endTime: { [Op.between]: [startTime, endTime] } }
                 ],
                 [Op.or]: [
-                    { classId }, // Class is busy
-                    { teacherId } // Teacher is busy
+                    { classId },   // Kelas sibuk
+                    { teacherId }  // Guru sibuk
                 ]
             }
         });
 
         if (conflict) {
-            return res.status(400).json({ message: 'Schedule conflict detected!' });
+            return res.status(400).json({ message: 'Schedule conflict detected! Class or Teacher is busy.' });
         }
 
+        // 2. Create Schedule
         const schedule = await Schedule.create({
             day, startTime, endTime, classId, subjectId, teacherId
         });
 
-        res.status(201).json(schedule);
+        // 3. Ambil data lengkap dengan relasi untuk Broadcast (Opsional, tapi bagus untuk UI client)
+        // Agar penerima tau nama Subject/Class/Teacher langsung
+        const fullSchedule = await Schedule.findByPk(schedule.id, {
+            include: [Class, Subject, Teacher]
+        });
+
+        // 4. Broadcast
+        await broadcastSchedule('CREATE', fullSchedule.toJSON());
+
+        res.status(201).json(fullSchedule);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -40,12 +71,21 @@ exports.createSchedule = async (req, res) => {
 
 exports.getAllSchedules = async (req, res) => {
     try {
+        const { classId, teacherId, day } = req.query;
+        const whereClause = {};
+
+        if (classId) whereClause.classId = classId;
+        if (teacherId) whereClause.teacherId = teacherId;
+        if (day) whereClause.day = day;
+
         const schedules = await Schedule.findAll({
+            where: whereClause,
             include: [
                 { model: Class, attributes: ['name'] },
-                { model: Subject, attributes: ['name'] },
+                { model: Subject, attributes: ['name', 'code'] },
                 { model: Teacher, attributes: ['name'] }
-            ]
+            ],
+            order: [['day', 'ASC'], ['startTime', 'ASC']]
         });
         res.status(200).json(schedules);
     } catch (error) {
@@ -57,11 +97,16 @@ exports.updateSchedule = async (req, res) => {
     try {
         const { id } = req.params;
         const { day, startTime, endTime, classId, subjectId, teacherId } = req.body;
+        
         const schedule = await Schedule.findByPk(id);
         if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
 
-        // Note: Should re-check conflicts here, but skipping for brevity in prototype
+        // Update Lokal
         await schedule.update({ day, startTime, endTime, classId, subjectId, teacherId });
+        
+        // Broadcast Update
+        await broadcastSchedule('UPDATE', schedule.toJSON());
+
         res.status(200).json({ message: 'Schedule updated successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -73,7 +118,15 @@ exports.deleteSchedule = async (req, res) => {
         const { id } = req.params;
         const schedule = await Schedule.findByPk(id);
         if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+        
+        const scheduleData = schedule.toJSON();
+
+        // Delete Lokal
         await schedule.destroy();
+
+        // Broadcast Delete
+        await broadcastSchedule('DELETE', scheduleData);
+
         res.status(200).json({ message: 'Schedule deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -82,18 +135,25 @@ exports.deleteSchedule = async (req, res) => {
 
 exports.deleteAllSchedules = async (req, res) => {
     try {
-        // Using truncate: true fails due to foreign key constraints.
-        // Using standard delete instead.
+        // Hapus semua data
         await Schedule.destroy({ where: {} });
-        res.status(200).json({ message: 'All schedules deleted successfully' });
+        
+        // Broadcast Delete All (Kita kirim special action atau looping delete - ini simplenya)
+        // Di microservice pattern, delete all agak tricky.
+        // Untuk sekarang kita asumsikan admin mereset manual di tiap service kalau hard reset.
+        // Atau kita bisa kirim flag khusus.
+        console.log('[WARNING] Delete All Schedules triggered locally only.');
+
+        res.status(200).json({ message: 'All schedules deleted successfully (Local)' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
+// --- AUTO GENERATOR (Dengan Broadcast) ---
 exports.autoGenerateSchedule = async (req, res) => {
     try {
-        // 1. Fetch all necessary data
+        // 1. Fetch Data
         const classes = await Class.findAll();
         const subjects = await Subject.findAll();
         const teachers = await Teacher.findAll();
@@ -102,7 +162,6 @@ exports.autoGenerateSchedule = async (req, res) => {
             return res.status(400).json({ message: 'Ensure classes, subjects, and teachers exist.' });
         }
 
-        // 2. Define Time Slots (Mon-Fri, 4 slots/day)
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
         const timeSlots = [
             { start: '08:00', end: '09:30' },
@@ -112,73 +171,45 @@ exports.autoGenerateSchedule = async (req, res) => {
         ];
 
         let createdCount = 0;
-        const newSchedules = [];
-
-        // Fetch existing schedules to avoid duplicates with pre-existing data
         const existingSchedules = await Schedule.findAll();
+        // Buffer untuk menyimpan jadwal baru lokal agar tidak bentrok dengan diri sendiri saat looping
+        const newlyCreatedBuffer = []; 
 
-        // 3. Iterate through each class
         for (const cls of classes) {
-            // Track assigned Subjects for this class to ensure uniqueness per week (No repetition)
             const assignedSubjects = new Set();
+            
+            // Cek existing DB
+            existingSchedules.filter(s => s.classId === cls.id).forEach(s => assignedSubjects.add(s.subjectId));
 
-            // Pre-fill assignedSubjects from existing DB schedules for this class
-            existingSchedules.filter(s => s.classId === cls.id).forEach(s => {
-                assignedSubjects.add(s.subjectId);
-            });
-
-            // Filter subjects matching the class level
+            // Filter mapel sesuai level kelas
             const eligibleSubjects = subjects.filter(s => s.level === cls.level);
-
-            if (eligibleSubjects.length === 0) {
-                console.warn(`No subjects found for Class ${cls.name} (Level ${cls.level})`);
-                continue;
-            }
+            if (eligibleSubjects.length === 0) continue;
 
             for (const day of days) {
                 for (const slot of timeSlots) {
-                    // Shuffle eligible subjects to randomize
                     const shuffledSubjects = [...eligibleSubjects].sort(() => 0.5 - Math.random());
-
                     let slotFilled = false;
 
                     for (const subject of shuffledSubjects) {
                         if (slotFilled) break;
+                        if (assignedSubjects.has(subject.id)) continue; // Mapel sudah ada minggu ini
 
-                        // Constraint: Subject already taught this week?
-                        if (assignedSubjects.has(subject.id)) {
-                            continue; // Skip this subject, already scheduled for this class this week
-                        }
-
-                        // Find eligible teachers for this subject
+                        // Cari guru yg cocok
                         let eligibleTeachers = teachers.filter(t => t.subjectSpecialization === subject.name);
                         if (eligibleTeachers.length === 0) eligibleTeachers = teachers; // Fallback
-
-                        // Shuffle teachers
                         eligibleTeachers = eligibleTeachers.sort(() => 0.5 - Math.random());
 
                         for (const teacher of eligibleTeachers) {
-                            // Check if Teacher is free
-                            const teacherBusyDB = existingSchedules.find(s =>
-                                s.teacherId === teacher.id && s.day === day && s.startTime === slot.start
-                            );
-                            const teacherBusyLocal = newSchedules.find(s =>
-                                s.teacherId === teacher.id && s.day === day && s.startTime === slot.start
-                            );
+                            // Cek Bentrok di DB
+                            const teacherBusyDB = existingSchedules.find(s => s.teacherId === teacher.id && s.day === day && s.startTime === slot.start);
+                            const classBusyDB = existingSchedules.find(s => s.classId === cls.id && s.day === day && s.startTime === slot.start);
+                            
+                            // Cek Bentrok di Buffer (Jadwal yg baru saja dibuat di loop ini)
+                            const teacherBusyLocal = newlyCreatedBuffer.find(s => s.teacherId === teacher.id && s.day === day && s.startTime === slot.start);
+                            
+                            if (teacherBusyDB || classBusyDB || teacherBusyLocal) continue;
 
-                            if (teacherBusyDB || teacherBusyLocal) continue; // Teacher busy
-
-                            // Check if Class is free (double check)
-                            const classBusyDB = existingSchedules.find(s =>
-                                s.classId === cls.id && s.day === day && s.startTime === slot.start
-                            );
-
-                            if (classBusyDB) {
-                                slotFilled = true; // Slot already taken by existing DB schedule
-                                break;
-                            }
-
-                            // If we get here, it's a match!
+                            // Create Schedule
                             const scheduleData = {
                                 day,
                                 startTime: slot.start,
@@ -188,21 +219,30 @@ exports.autoGenerateSchedule = async (req, res) => {
                                 teacherId: teacher.id
                             };
 
-                            await Schedule.create(scheduleData);
-                            newSchedules.push(scheduleData);
-                            assignedSubjects.add(subject.id); // Mark this subject as used for this class this week
+                            const newSchedule = await Schedule.create(scheduleData);
+                            
+                            // Masukkan ke buffer
+                            newlyCreatedBuffer.push(newSchedule.toJSON());
+                            assignedSubjects.add(subject.id);
                             createdCount++;
                             slotFilled = true;
-                            break; // Stop looking for teachers for this subject
+
+                            // [PENTING] Broadcast langsung!
+                            // Note: Di production, ini sebaiknya pakai antrian (Queue) agar tidak spam HTTP request
+                            // Tapi untuk prototype, ini oke.
+                            await broadcastSchedule('CREATE', newSchedule.toJSON());
+
+                            break; // Stop cari guru
                         }
                     }
                 }
             }
         }
 
-        res.status(201).json({ message: `Auto-generated ${createdCount} schedule entries with unique (Subject-Teacher) per Class constraints.` });
+        res.status(201).json({ message: `Auto-generated ${createdCount} schedule entries and synced to services.` });
 
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: error.message });
     }
 };
