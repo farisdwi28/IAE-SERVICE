@@ -1,13 +1,21 @@
-const { Student, Attendance, LibraryBook, LibraryLoan, Bill, Fee, Class, Schedule, Subject, Teacher } = require('../models');
+const { Student, Attendance, LibraryBook, LibraryLoan, Bill, Fee, Class, Schedule, Subject, Teacher, Grade } = require('../models');
 const { Op } = require('sequelize');
 
 // --- Profile ---
 exports.getProfile = async (req, res) => {
     try {
         const student = await Student.findByPk(req.user.id, {
-            attributes: { exclude: ['password'] },
-            include: [{ model: Class, attributes: ['name'] }]
+            attributes: { exclude: ['password'] }
         });
+        
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        // Manual fetch Class Name
+        if (student.classId) {
+            const cls = await Class.findByPk(student.classId);
+            if (cls) student.setDataValue('ClassName', cls.name);
+        }
+
         res.status(200).json(student);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -17,7 +25,6 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const { photo, contact, address } = req.body;
-        // Only allow updating specific fields
         await Student.update(
             { photo, contact, address },
             { where: { id: req.user.id } }
@@ -52,15 +59,34 @@ exports.getAttendance = async (req, res) => {
     }
 };
 
-// --- Grades ---
+// --- Grades (SUDAH DIPERBAIKI) ---
 exports.getGrades = async (req, res) => {
     try {
+        // [FIX] Gunakan 'Grade' (Singular, sesuai import di atas)
         const grades = await Grade.findAll({
-            where: { studentId: req.user.id },
-            include: [{ model: Subject, attributes: ['name'] }]
+            where: { studentId: req.user.id }
         });
-        res.status(200).json(grades);
+
+        if (!grades.length) return res.status(200).json([]);
+
+        // Ambil nama mata pelajaran secara manual (Safe Fetch)
+        const subjectIds = [...new Set(grades.map(g => g.subjectId))];
+        const subjects = await Subject.findAll({
+            where: { id: subjectIds }
+        });
+
+        const subjectMap = {};
+        subjects.forEach(s => { subjectMap[s.id] = s.name; });
+
+        // Gabungkan data nilai dengan nama mapel
+        const result = grades.map(g => ({
+            ...g.toJSON(),
+            subjectName: subjectMap[g.subjectId] || 'Unknown Subject'
+        }));
+
+        res.status(200).json(result);
     } catch (error) {
+        console.error("Get Grades Error:", error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -75,13 +101,21 @@ exports.getSchedule = async (req, res) => {
 
         const schedules = await Schedule.findAll({
             where: { classId: student.classId },
-            include: [
-                { model: Subject, attributes: ['name'] },
-                { model: Teacher, attributes: ['name'] }
-            ],
             order: [['day', 'ASC'], ['startTime', 'ASC']]
         });
-        res.status(200).json(schedules);
+        
+        // Manual Fetch Nama Mapel & Guru untuk Schedule (Optional tapi recommended)
+        // Agar response schedule berisi nama mapel, bukan cuma subjectId
+        const subjectIds = [...new Set(schedules.map(s => s.subjectId))];
+        const subjects = await Subject.findAll({ where: { id: subjectIds } });
+        const subMap = {}; subjects.forEach(s => subMap[s.id] = s.name);
+
+        const result = schedules.map(s => ({
+            ...s.toJSON(),
+            subjectName: subMap[s.subjectId] || 'Subject'
+        }));
+
+        res.status(200).json(result);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -155,7 +189,6 @@ exports.borrowBook = async (req, res) => {
             return res.status(400).json({ message: 'Book not available' });
         }
 
-        // Check if already borrowed
         const existingLoan = await LibraryLoan.findOne({
             where: {
                 studentId: req.user.id,
@@ -168,9 +201,8 @@ exports.borrowBook = async (req, res) => {
             return res.status(400).json({ message: 'You have already borrowed this book' });
         }
 
-        // Create Loan
         const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 7); // 1 week loan
+        dueDate.setDate(dueDate.getDate() + 7);
 
         await LibraryLoan.create({
             studentId: req.user.id,
@@ -179,7 +211,6 @@ exports.borrowBook = async (req, res) => {
             status: 'Borrowed'
         });
 
-        // Decrease stock
         await book.decrement('stock');
 
         res.status(201).json({ message: 'Book borrowed successfully' });
@@ -208,7 +239,6 @@ exports.returnBook = async (req, res) => {
             status: 'Returned'
         });
 
-        // Increase stock
         const book = await LibraryBook.findByPk(loan.bookId);
         await book.increment('stock');
 

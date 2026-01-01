@@ -1,13 +1,29 @@
+const axios = require('axios');
 const { Teacher, Schedule, Class, Subject, Student, Attendance, Grade } = require('../models');
 
-// --- Schedules ---
+// [HELPER] Broadcast ke Service Lain
+const broadcastToServices = async (endpoint, action, data) => {
+    const services = [
+        'http://student-service:3003',
+        'http://parent-service:3005',
+        'http://admin-service:3002' 
+    ];
+
+    const syncPromises = services.map(serviceUrl => {
+        return axios.post(`${serviceUrl}/api/sync/${endpoint}`, {
+            action: action,
+            data: data
+        }).catch(err => {
+            console.error(`Gagal sync ${endpoint} ke ${serviceUrl}:`, err.message);
+        });
+    });
+
+    await Promise.all(syncPromises);
+};
+
+// --- Schedules (Jadwal) ---
 exports.getMySchedules = async (req, res) => {
     try {
-        // req.user.id is Teacher ID (from authMiddleware)
-        // But wait, authMiddleware for teacher uses 'nip' lookup? 
-        // Let's check authController.login. It returns `id: user.id`.
-        // So req.user.id is the Teacher's primary key ID.
-
         const schedules = await Schedule.findAll({
             where: { teacherId: req.user.id },
             include: [
@@ -34,41 +50,43 @@ exports.getStudentsByClass = async (req, res) => {
     }
 };
 
-// --- Attendance ---
+// --- Attendance (Absensi) ---
 exports.recordAttendance = async (req, res) => {
     try {
+        // Model Simple: Tidak ada field 'notes'
         const { scheduleId, studentId, status, date } = req.body;
         const attendanceDate = date || new Date().toISOString().split('T')[0];
 
-        // Verify that the teacher is assigned to this schedule
         const schedule = await Schedule.findByPk(scheduleId);
-        if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+        if (!schedule) return res.status(404).json({ message: 'Jadwal tidak ditemukan' });
 
         if (schedule.teacherId !== req.user.id) {
-            return res.status(403).json({ message: 'You are not authorized to manage attendance for this class session' });
+            return res.status(403).json({ message: 'Anda tidak memiliki izin' });
         }
 
-        // Check if attendance already exists for this student, schedule, and date
         const existingAttendance = await Attendance.findOne({
-            where: {
-                scheduleId,
-                studentId,
-                date: attendanceDate
-            }
+            where: { scheduleId, studentId, date: attendanceDate }
         });
+
+        let attendance;
+        let action;
 
         if (existingAttendance) {
             await existingAttendance.update({ status });
-            res.status(200).json(existingAttendance);
+            attendance = existingAttendance;
+            action = 'UPDATE';
+            res.status(200).json(attendance);
         } else {
-            const attendance = await Attendance.create({
-                scheduleId,
-                studentId,
-                status,
-                date: attendanceDate
+            attendance = await Attendance.create({
+                scheduleId, studentId, status, date: attendanceDate
             });
+            action = 'CREATE';
             res.status(201).json(attendance);
         }
+
+        // Broadcast Sync
+        await broadcastToServices('attendance', action, attendance.toJSON());
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -80,16 +98,14 @@ exports.getAttendanceByClass = async (req, res) => {
         const { date } = req.query;
 
         const schedule = await Schedule.findByPk(scheduleId);
-        if (!schedule) return res.status(404).json({ message: 'Schedule not found' });
+        if (!schedule) return res.status(404).json({ message: 'Jadwal tidak ditemukan' });
 
         if (schedule.teacherId !== req.user.id) {
-            return res.status(403).json({ message: 'Unauthorized' });
+            return res.status(403).json({ message: 'Tidak diizinkan' });
         }
 
         const whereClause = { scheduleId };
-        if (date) {
-            whereClause.date = date;
-        }
+        if (date) whereClause.date = date;
 
         const attendance = await Attendance.findAll({
             where: whereClause,
@@ -102,31 +118,26 @@ exports.getAttendanceByClass = async (req, res) => {
     }
 };
 
-// --- Grades ---
+// --- Grades (Nilai) ---
 exports.inputGrade = async (req, res) => {
     try {
+        // Model Simple: Tidak ada field 'semester' dan 'description'
         const { studentId, subjectId, type, score } = req.body;
 
-        // Verify teacher teaches this subject (Simplified check: Teacher model has subjectSpecialization, but ideally we check Schedule or a TeacherSubject table)
-        // For strictness as per requirement: "Hanya boleh input/update nilai siswa untuk mata pelajaran yang dipegang"
-        // We can check if there is ANY schedule where this teacher teaches this subject.
         const isTeachingSubject = await Schedule.findOne({
-            where: {
-                teacherId: req.user.id,
-                subjectId
-            }
+            where: { teacherId: req.user.id, subjectId }
         });
 
         if (!isTeachingSubject) {
-            return res.status(403).json({ message: 'You do not teach this subject' });
+            return res.status(403).json({ message: 'Anda tidak mengajar mata pelajaran ini' });
         }
 
         const grade = await Grade.create({
-            studentId,
-            subjectId,
-            type,
-            score
+            studentId, subjectId, type, score
         });
+
+        // Broadcast Sync
+        await broadcastToServices('grades', 'CREATE', grade.toJSON());
 
         res.status(201).json(grade);
     } catch (error) {
@@ -137,25 +148,25 @@ exports.inputGrade = async (req, res) => {
 exports.updateGrade = async (req, res) => {
     try {
         const { id } = req.params;
-        const { score } = req.body;
+        const { score } = req.body; // Hanya update score
 
         const grade = await Grade.findByPk(id);
-        if (!grade) return res.status(404).json({ message: 'Grade not found' });
+        if (!grade) return res.status(404).json({ message: 'Nilai tidak ditemukan' });
 
-        // Verify ownership (Teacher teaches the subject of this grade)
         const isTeachingSubject = await Schedule.findOne({
-            where: {
-                teacherId: req.user.id,
-                subjectId: grade.subjectId
-            }
+            where: { teacherId: req.user.id, subjectId: grade.subjectId }
         });
 
         if (!isTeachingSubject) {
-            return res.status(403).json({ message: 'You do not teach this subject' });
+            return res.status(403).json({ message: 'Anda tidak mengajar mata pelajaran ini' });
         }
 
         await grade.update({ score });
-        res.status(200).json({ message: 'Grade updated successfully' });
+
+        // Broadcast Sync
+        await broadcastToServices('grades', 'UPDATE', grade.toJSON());
+
+        res.status(200).json({ message: 'Nilai berhasil diperbarui' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

@@ -19,10 +19,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.post('/api/sync/students', syncController.syncStudentData);
-app.post('/api/sync/classes', syncController.syncClass);
-app.post('/api/sync/teachers', syncController.syncTeacher);
-app.post('/api/sync/subjects', syncController.syncSubject);
-app.post('/api/sync/schedules', syncController.syncSchedule);
+app.post('/api/sync/classes', syncController.syncClassData);
+app.post('/api/sync/teachers', syncController.syncTeacherData);
+app.post('/api/sync/subjects', syncController.syncSubjectData);
+app.post('/api/sync/schedules', syncController.syncScheduleData);
+app.post('/api/sync/fees', syncController.syncFeeData);
+app.post('/api/sync/bills', syncController.syncBillData);
 
 // Routes
 app.use('/api/teacher', teacherRoutes);

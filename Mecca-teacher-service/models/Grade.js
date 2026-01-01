@@ -5,7 +5,7 @@ const Grade = sequelize.define('Grade', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: false
     },
     type: {
         type: DataTypes.STRING, // e.g., "Midterm", "Final", "Assignment 1"

@@ -1,4 +1,4 @@
-const { Student, Teacher, Schedule, Attendance, Grade, Class, Subject, Bill, Fee } = require('../models');
+const { Student, Teacher, Schedule, Attendance, Grade, Class, Subject } = require('../models');
 
 // --- SYNC STUDENTS ---
 exports.syncStudentData = async (req, res) => {
@@ -205,7 +205,7 @@ exports.syncAttendanceData = async (req, res) => {
                 scheduleId: data.scheduleId,
                 date: data.date,
                 status: data.status
-                // notes dihapus (Simple Model)
+                // notes dihapus (Model Simple)
             };
             
             const existing = await Attendance.findByPk(data.id);
@@ -233,113 +233,35 @@ exports.syncGradeData = async (req, res) => {
         if (body.action) action = body.action;
         const data = body.data;
 
-        console.log(`[SYNC GRADE] Action: ${action} | Student: ${data.studentId} | Score: ${data.score}`);
+        console.log(`[SYNC GRADE START] Action: ${action} | ID: ${data.id} | Score: ${data.score}`);
+
+        const payload = {
+            id: data.id,
+            studentId: data.studentId,
+            subjectId: data.subjectId,
+            type: data.type,
+            score: data.score
+            // semester & description dihapus (Model Simple)
+        };
 
         if (action === 'CREATE' || action === 'UPDATE') {
-            const payload = {
-                id: data.id,
-                studentId: data.studentId,
-                subjectId: data.subjectId,
-                type: data.type,
-                score: data.score
-                // semester & description dihapus (Simple Model)
-            };
-            
             const existing = await Grade.findByPk(data.id);
             if (existing) {
+                console.log(`[SYNC GRADE] Found existing grade ${data.id}, updating...`);
                 await existing.update(payload);
             } else {
+                console.log(`[SYNC GRADE] Grade ${data.id} not found, creating new...`);
                 await Grade.create(payload);
+                console.log(`[SYNC GRADE] Create Success.`);
             }
         } else if (action === 'DELETE') {
             await Grade.destroy({ where: { id: data.id } });
+            console.log(`[SYNC GRADE] Delete Success.`);
         }
 
         res.status(200).json({ message: 'Grade sync successful' });
     } catch (error) {
-        console.error(`[SYNC GRADE ERROR]`, error.message);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// --- SYNC FEES (JENIS TAGIHAN) ---
-exports.syncFeeData = async (req, res) => {
-    let action = 'UNKNOWN';
-    try {
-        const body = req.body;
-        if (body.action) action = body.action;
-        const data = body.data;
-
-        console.log(`[SYNC FEE] Action: ${action} | Fee: ${data?.name}`);
-
-        const payload = {
-            id: data.id,
-            name: data.name,
-            amount: data.amount,
-            type: data.type,
-            description: data.description
-        };
-
-        if (action === 'CREATE') {
-            const existing = await Fee.findByPk(data.id);
-            if (!existing) await Fee.create(payload);
-        } else if (action === 'UPDATE') {
-            const existing = await Fee.findByPk(data.id);
-            if (existing) await existing.update(payload);
-            else await Fee.create(payload);
-        } else if (action === 'DELETE') {
-            await Fee.destroy({ where: { id: data.id } });
-        }
-
-        res.status(200).json({ message: 'Fee sync successful' });
-    } catch (error) {
-        console.error(`[SYNC FEE ERROR]`, error.message);
-        res.status(500).json({ message: error.message });
-    }
-};
-
-// --- SYNC BILLS (TAGIHAN) ---
-exports.syncBillData = async (req, res) => {
-    let action = 'UNKNOWN';
-    try {
-        const body = req.body;
-        if (body.action) action = body.action;
-        const data = body.data;
-
-        console.log(`[SYNC BILL] Action: ${action}`);
-
-        if (action === 'BULK_CREATE') {
-            await Bill.bulkCreate(data, { 
-                updateOnDuplicate: ['status', 'paymentProof', 'paidDate', 'updatedAt'] 
-            });
-        } else if (action === 'CREATE' || action === 'UPDATE') {
-            const payload = {
-                id: data.id,
-                billNumber: data.billNumber,
-                amount: data.amount,
-                status: data.status,
-                dueDate: data.dueDate,
-                studentId: data.studentId,
-                feeId: data.feeId,
-                month: data.month,
-                year: data.year,
-                paymentProof: data.paymentProof,
-                paidDate: data.paidDate
-            };
-            
-            const existing = await Bill.findByPk(data.id);
-            if (existing) {
-                await existing.update(payload);
-            } else {
-                await Bill.create(payload);
-            }
-        } else if (action === 'DELETE') {
-            await Bill.destroy({ where: { id: data.id } });
-        }
-
-        res.status(200).json({ message: 'Bill sync successful' });
-    } catch (error) {
-        console.error(`[SYNC BILL ERROR]`, error.message);
-        res.status(500).json({ message: error.message });
+        console.error(`[SYNC GRADE ERROR]`, error);
+        res.status(500).json({ message: error.message, detail: error });
     }
 };

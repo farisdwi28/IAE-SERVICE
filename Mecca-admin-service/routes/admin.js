@@ -679,6 +679,56 @@ router.put('/fees/:id', feeController.updateFee);
 router.delete('/fees/:id', feeController.deleteFee);
 
 // Bills
+
+/**
+ * @swagger
+ * /bills:
+ *   post:
+ *     summary: Create a manual bill for a student
+ *     tags:
+ *       - Bills
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - studentId
+ *               - feeId
+ *               - dueDate
+ *             properties:
+ *               studentId:
+ *                 type: integer
+ *                 example: 1
+ *               feeId:
+ *                 type: integer
+ *                 example: 3
+ *               dueDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2026-01-31"
+ *               month:
+ *                 type: integer
+ *                 example: 1
+ *               year:
+ *                 type: integer
+ *                 example: 2026
+ *               customAmount:
+ *                 type: number
+ *                 example: 150000
+ *                 description: Optional override amount
+ *     responses:
+ *       201:
+ *         description: Bill created successfully
+ *       404:
+ *         description: Student or Fee not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/bills', billController.createBill);
+
+
 /**
  * @swagger
  * /bills:

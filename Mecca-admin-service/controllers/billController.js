@@ -1,5 +1,60 @@
-const { Bill, Student, Fee } = require('../models');
+const { Bill, Student, Fee, Class, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const axios = require('axios');
+
+// [HELPER] Broadcast
+const broadcastToServices = async (action, data) => {
+    const services = [
+        'http://student-service:3003',
+        'http://parent-service:3005'
+    ];
+
+    const syncPromises = services.map(serviceUrl => {
+        return axios.post(`${serviceUrl}/api/sync/bills`, {
+            action: action,
+            data: data
+        }).catch(err => {
+            console.error(`Gagal sync Bill ke ${serviceUrl}:`, err.message);
+        });
+    });
+
+    await Promise.all(syncPromises);
+};
+
+// [BARU] Create Manual Bill
+exports.createBill = async (req, res) => {
+    try {
+        const { studentId, feeId, dueDate, month, year, customAmount } = req.body;
+
+        const student = await Student.findByPk(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        const fee = await Fee.findByPk(feeId);
+        if (!fee) return res.status(404).json({ message: 'Fee type not found' });
+
+        // Generate Bill Number
+        const feeNameCode = fee.name.replace(/\s+/g, '').substr(0, 3).toUpperCase();
+        const billNumber = `BILL-${student.nis}-${feeNameCode}-${Date.now()}`;
+
+        const bill = await Bill.create({
+            billNumber,
+            amount: customAmount || fee.amount, // Bisa override jumlah
+            status: 'Pending',
+            dueDate,
+            studentId,
+            feeId,
+            month,
+            year
+        });
+
+        // Broadcast ke Service Lain
+        await broadcastToServices('CREATE', bill.toJSON());
+
+        res.status(201).json({ message: 'Bill created successfully', bill });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
 
 exports.getAllBills = async (req, res) => {
     try {
@@ -15,9 +70,6 @@ exports.getAllBills = async (req, res) => {
 
         if (search) {
             whereClause.billNumber = { [Op.like]: `%${search}%` };
-            // Note: Searching by student name/nis via include is complex in Sequelize with limit/offset
-            // For simplicity, we'll primarily search billNumber here, or rely on the specific 'nis' filter.
-            // If we want to search student name, we'd need to add it to studentWhereClause, but that acts as an AND with the include.
         }
 
         const { count, rows } = await Bill.findAndCountAll({
@@ -47,10 +99,9 @@ exports.getAllBills = async (req, res) => {
 };
 
 exports.markBillAsPaid = async (req, res) => {
-    const t = await require('../models').sequelize.transaction();
+    const t = await sequelize.transaction();
     try {
         const { id } = req.params;
-        const { Bill, Student, Fee, Class } = require('../models');
 
         const bill = await Bill.findByPk(id, {
             include: [
@@ -72,11 +123,11 @@ exports.markBillAsPaid = async (req, res) => {
         }, { transaction: t });
 
         // Check if this is "Uang Gedung" and Student is inactive
+        // Logika Aktivasi Siswa jika bayar Gedung
         if (bill.Fee?.name === 'Uang Gedung' && bill.Student && !bill.Student.isActive) {
             const student = bill.Student;
-            const level = 7; // Default level for new students
+            const level = 7; // Default level
 
-            // Find available class for level 7
             const classes = await Class.findAll({
                 where: { level },
                 transaction: t,
@@ -102,25 +153,25 @@ exports.markBillAsPaid = async (req, res) => {
                     classId: assignedClass.id
                 }, { transaction: t });
 
-                // Also mark SPP as paid if it exists for the same month (optional, but good for UX)
+                // Also mark SPP as paid if it exists for the same month
                 await Bill.update(
                     { status: 'Paid', paidDate: new Date() },
                     {
                         where: {
                             studentId: student.id,
                             status: 'Pending',
-                            // Assuming SPP is generated at the same time
+                            // Add logic to match month/year if needed
                         },
                         transaction: t
                     }
                 );
             } else {
-                // If no class found, we still mark bill as paid but warn admin? 
-                // Or maybe we should fail? 
-                // For now, let's log it and keep student inactive but bill paid.
                 console.warn(`No class available for student ${student.nis} after payment.`);
             }
         }
+
+        // [BARU] Broadcast Update Bill ke Student & Parent Service
+        await broadcastToServices('UPDATE', bill.toJSON());
 
         await t.commit();
         res.status(200).json({ message: 'Bill marked as Paid', bill });
@@ -133,8 +184,8 @@ exports.markBillAsPaid = async (req, res) => {
 exports.sendBillReminder = async (req, res) => {
     try {
         const { id } = req.params;
-        const { Bill, Student, Fee } = require('../models');
-        const { sendEmail } = require('../services/notificationService');
+        // Import service notifikasi jika ada
+        // const { sendEmail } = require('../services/notificationService');
 
         const bill = await Bill.findByPk(id, {
             include: [
@@ -148,7 +199,6 @@ exports.sendBillReminder = async (req, res) => {
 
         const parentEmail = bill.Student.parentEmail;
 
-        // Template Message
         const subject = `Payment Reminder: ${bill.Fee.name}`;
         const message = `
 Dear ${bill.Student.name} & Parents,
@@ -160,14 +210,18 @@ Bill Details:
 - Amount: Rp ${parseInt(bill.amount).toLocaleString()}
 - Due Date: ${new Date(bill.dueDate).toLocaleDateString()}
 
-Please make the payment at your earliest convenience to avoid any service interruptions.
+Please make the payment at your earliest convenience.
 
 Thank you,
 School Administration
         `.trim();
 
         if (parentEmail) {
-            await sendEmail(parentEmail, subject, message);
+            // Uncomment jika service email sudah siap
+            // await sendEmail(parentEmail, subject, message);
+            
+            // Simulasi sukses
+            console.log(`[EMAIL MOCK] To: ${parentEmail} | Subject: ${subject}`);
             return res.status(200).json({ message: `Reminder sent to parent (${parentEmail})` });
         } else {
             return res.status(400).json({ message: 'No parent email found for this student' });

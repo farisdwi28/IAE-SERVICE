@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const sequelize = require('./config/database');
 const adminRoutes = require('./routes/admin');
+const syncController = require('./controllers/syncController');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -19,6 +20,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/admin', adminRoutes);
+
+app.post('/api/sync/attendance', syncController.syncAttendanceData);
+app.post('/api/sync/grades', syncController.syncGradeData);
 
 // Base Route
 app.get('/', (req, res) => {
