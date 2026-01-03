@@ -45,7 +45,7 @@ router.get('/schedules', teacherController.getMySchedules);
  *       500:
  *         description: Server error
  */
-router.get('/students/:classId', teacherController.getStudentsByClass);
+router.get('/students/:classId', teacherController.getGradesByClass);
 
 // Attendance
 /**
@@ -158,8 +158,6 @@ router.post('/grades', teacherController.inputGrade);
  *         description: Server error
  */
 router.put('/grades/:id', teacherController.updateGrade);
-
-router.get('/students/:classId', teacherController.getGradesByClass);
 
 router.get('/profile', teacherController.getProfile);
 
