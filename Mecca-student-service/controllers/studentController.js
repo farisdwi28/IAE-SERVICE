@@ -48,11 +48,35 @@ exports.getAttendance = async (req, res) => {
             order: [['date', 'DESC']]
         });
 
+        // [BARU] Manual Fetch Nama Mapel via Schedule
+        // 1. Ambil semua Schedule ID dari data absen
+        const scheduleIds = [...new Set(rows.map(r => r.scheduleId))];
+        const schedules = await Schedule.findAll({ where: { id: scheduleIds } });
+
+        // 2. Ambil semua Subject ID dari schedule tadi
+        const subjectIds = [...new Set(schedules.map(s => s.subjectId))];
+        const subjects = await Subject.findAll({ where: { id: subjectIds } });
+
+        // 3. Buat Peta (Map)
+        const subjectMap = {}; // ID -> Nama Mapel
+        subjects.forEach(s => subjectMap[s.id] = s.name);
+
+        const scheduleMap = {}; // ScheduleID -> Nama Mapel
+        schedules.forEach(s => {
+            scheduleMap[s.id] = subjectMap[s.subjectId] || 'Unknown Subject';
+        });
+
+        // 4. Masukkan nama mapel ke data attendance
+        const enrichedRows = rows.map(r => ({
+            ...r.toJSON(),
+            subjectName: scheduleMap[r.scheduleId] || 'Kegiatan Lain'
+        }));
+
         res.status(200).json({
             totalItems: count,
             totalPages: Math.ceil(count / limit),
             currentPage: parseInt(page),
-            attendance: rows
+            attendance: enrichedRows
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
