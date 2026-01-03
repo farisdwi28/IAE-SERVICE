@@ -51,8 +51,50 @@ exports.getStudentsByClass = async (req, res) => {
 };
 
 // --- Attendance (Absensi) ---
+exports.getAttendanceByClass = async (req, res) => {
+    try {
+        const { scheduleId } = req.params;
+        const { date } = req.query; // Tanggal yg dipilih guru (YYYY-MM-DD)
+
+        const targetDate = date || new Date().toISOString().split('T')[0];
+
+        // 1. Cari Jadwal untuk tahu Kelas ID
+        const schedule = await Schedule.findByPk(scheduleId);
+        if (!schedule) return res.status(404).json({ message: 'Jadwal tidak ditemukan' });
+
+        if (schedule.teacherId !== req.user.id) {
+            return res.status(403).json({ message: 'Tidak diizinkan' });
+        }
+
+        // 2. Ambil Semua Siswa di Kelas Tersebut + Data Absensi (Left Join)
+        const students = await Student.findAll({
+            where: { classId: schedule.classId, isActive: true },
+            attributes: ['id', 'name', 'nis'],
+            include: [
+                {
+                    model: Attendance,
+                    required: false, // Left Join: Siswa tetap muncul walau belum diabsen
+                    where: { 
+                        scheduleId: scheduleId,
+                        date: targetDate 
+                    },
+                    attributes: ['id', 'status', 'date']
+                }
+            ],
+            order: [['name', 'ASC']]
+        });
+
+        res.status(200).json(students);
+    } catch (error) {
+        console.error("Error Get Attendance:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// ... (Fungsi recordAttendance juga perlu sedikit penyesuaian agar return data yg benar)
 exports.recordAttendance = async (req, res) => {
     try {
+        // Hapus 'notes' agar sesuai model simple
         const { scheduleId, studentId, status, date } = req.body;
         const attendanceDate = date || new Date().toISOString().split('T')[0];
 
@@ -63,6 +105,7 @@ exports.recordAttendance = async (req, res) => {
             return res.status(403).json({ message: 'Anda tidak memiliki izin' });
         }
 
+        // Logic Upsert (Update or Create)
         const existingAttendance = await Attendance.findOne({
             where: { scheduleId, studentId, date: attendanceDate }
         });
@@ -74,43 +117,16 @@ exports.recordAttendance = async (req, res) => {
             await existingAttendance.update({ status });
             attendance = existingAttendance;
             action = 'UPDATE';
-            res.status(200).json(attendance);
         } else {
             attendance = await Attendance.create({
                 scheduleId, studentId, status, date: attendanceDate
             });
             action = 'CREATE';
-            res.status(201).json(attendance);
         }
 
         await broadcastToServices('attendance', action, attendance.toJSON());
 
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-exports.getAttendanceByClass = async (req, res) => {
-    try {
-        const { scheduleId } = req.params;
-        const { date } = req.query;
-
-        const schedule = await Schedule.findByPk(scheduleId);
-        if (!schedule) return res.status(404).json({ message: 'Jadwal tidak ditemukan' });
-
-        if (schedule.teacherId !== req.user.id) {
-            return res.status(403).json({ message: 'Tidak diizinkan' });
-        }
-
-        const whereClause = { scheduleId };
-        if (date) whereClause.date = date;
-
-        const attendance = await Attendance.findAll({
-            where: whereClause,
-            include: [{ model: Student, attributes: ['name', 'nis'] }]
-        });
-
-        res.status(200).json(attendance);
+        res.status(200).json(attendance); // Return 200 OK
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
