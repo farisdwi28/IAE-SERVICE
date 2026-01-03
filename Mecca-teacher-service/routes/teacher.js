@@ -159,4 +159,6 @@ router.post('/grades', teacherController.inputGrade);
  */
 router.put('/grades/:id', teacherController.updateGrade);
 
+router.get('/profile', teacherController.getProfile);
+
 module.exports = router;

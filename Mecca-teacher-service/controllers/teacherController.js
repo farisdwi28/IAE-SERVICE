@@ -21,6 +21,24 @@ const broadcastToServices = async (endpoint, action, data) => {
     await Promise.all(syncPromises);
 };
 
+// --- Profil Guru ---
+exports.getProfile = async (req, res) => {
+    try {
+        // req.user.id didapat dari middleware auth (token)
+        const teacher = await Teacher.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
+
+        if (!teacher) {
+            return res.status(404).json({ message: 'Teacher not found' });
+        }
+
+        res.status(200).json(teacher);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // --- Schedules (Jadwal) ---
 exports.getMySchedules = async (req, res) => {
     try {
