@@ -21,24 +21,6 @@ const broadcastToServices = async (endpoint, action, data) => {
     await Promise.all(syncPromises);
 };
 
-// --- Profil Guru ---
-exports.getProfile = async (req, res) => {
-    try {
-        // req.user.id didapat dari middleware auth (token)
-        const teacher = await Teacher.findByPk(req.user.id, {
-            attributes: { exclude: ['password'] }
-        });
-
-        if (!teacher) {
-            return res.status(404).json({ message: 'Teacher not found' });
-        }
-
-        res.status(200).json(teacher);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
 // --- Schedules (Jadwal) ---
 exports.getMySchedules = async (req, res) => {
     try {
@@ -71,7 +53,6 @@ exports.getStudentsByClass = async (req, res) => {
 // --- Attendance (Absensi) ---
 exports.recordAttendance = async (req, res) => {
     try {
-        // Model Simple: Tidak ada field 'notes'
         const { scheduleId, studentId, status, date } = req.body;
         const attendanceDate = date || new Date().toISOString().split('T')[0];
 
@@ -102,7 +83,6 @@ exports.recordAttendance = async (req, res) => {
             res.status(201).json(attendance);
         }
 
-        // Broadcast Sync
         await broadcastToServices('attendance', action, attendance.toJSON());
 
     } catch (error) {
@@ -137,9 +117,44 @@ exports.getAttendanceByClass = async (req, res) => {
 };
 
 // --- Grades (Nilai) ---
+
+// [UPDATED] Ambil Nilai Siswa per Kelas
+exports.getGradesByClass = async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { subjectId, type } = req.query;
+
+        console.log(`[GET GRADES] Class: ${classId}, Subject: ${subjectId}, Type: ${type}`);
+
+        // Buat filter dinamis untuk Grades
+        const gradeFilter = {};
+        if (subjectId) gradeFilter.subjectId = subjectId;
+        if (type) gradeFilter.type = type;
+
+        const students = await Student.findAll({
+            where: { classId, isActive: true },
+            attributes: ['id', 'nis', 'name'],
+            include: [
+                {
+                    model: Grade,
+                    as: 'grades', // <--- PENTING: Harus match dengan models/index.js
+                    required: false, // Left Join (Siswa tetap tampil meski belum ada nilai)
+                    where: gradeFilter, // Filter diterapkan di sini
+                    attributes: ['id', 'score', 'type', 'subjectId']
+                }
+            ],
+            order: [['name', 'ASC']]
+        });
+
+        res.status(200).json(students);
+    } catch (error) {
+        console.error("Error Get Grades:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 exports.inputGrade = async (req, res) => {
     try {
-        // Model Simple: Tidak ada field 'semester' dan 'description'
         const { studentId, subjectId, type, score } = req.body;
 
         const isTeachingSubject = await Schedule.findOne({
@@ -150,12 +165,24 @@ exports.inputGrade = async (req, res) => {
             return res.status(403).json({ message: 'Anda tidak mengajar mata pelajaran ini' });
         }
 
-        const grade = await Grade.create({
-            studentId, subjectId, type, score
+        // Cek dulu apakah nilai sudah ada biar tidak duplikat (Upsert logic sederhana)
+        const existingGrade = await Grade.findOne({
+            where: { studentId, subjectId, type }
         });
 
-        // Broadcast Sync
-        await broadcastToServices('grades', 'CREATE', grade.toJSON());
+        let grade;
+        let action;
+
+        if (existingGrade) {
+            await existingGrade.update({ score });
+            grade = existingGrade;
+            action = 'UPDATE';
+        } else {
+            grade = await Grade.create({ studentId, subjectId, type, score });
+            action = 'CREATE';
+        }
+
+        await broadcastToServices('grades', action, grade.toJSON());
 
         res.status(201).json(grade);
     } catch (error) {
@@ -166,7 +193,7 @@ exports.inputGrade = async (req, res) => {
 exports.updateGrade = async (req, res) => {
     try {
         const { id } = req.params;
-        const { score } = req.body; // Hanya update score
+        const { score } = req.body;
 
         const grade = await Grade.findByPk(id);
         if (!grade) return res.status(404).json({ message: 'Nilai tidak ditemukan' });
@@ -181,7 +208,6 @@ exports.updateGrade = async (req, res) => {
 
         await grade.update({ score });
 
-        // Broadcast Sync
         await broadcastToServices('grades', 'UPDATE', grade.toJSON());
 
         res.status(200).json({ message: 'Nilai berhasil diperbarui' });
@@ -190,35 +216,18 @@ exports.updateGrade = async (req, res) => {
     }
 };
 
-// [BARU] Get Grades by Class & Subject & Type
-exports.getGradesByClass = async (req, res) => {
+// --- Profile ---
+exports.getProfile = async (req, res) => {
     try {
-        const { classId } = req.params;
-        const { subjectId, type } = req.query;
-
-        // Validasi: Pastikan Guru mengajar di kelas & mapel tersebut (via Schedule)
-        // (Bisa diskip kalau mau lebih longgar, tapi ini best practice)
-        
-        // Cari semua siswa di kelas tersebut
-        const students = await Student.findAll({
-            where: { classId, isActive: true },
-            attributes: ['id', 'nis', 'name'],
-            include: [
-                {
-                    model: Grade,
-                    required: false, // Left Join (Tampilkan siswa meski belum ada nilai)
-                    where: { 
-                        subjectId: subjectId,
-                        // Jika type ada, filter by type. Jika tidak, ambil semua.
-                        ...(type ? { type } : {}) 
-                    },
-                    attributes: ['id', 'score', 'type']
-                }
-            ],
-            order: [['name', 'ASC']]
+        const teacher = await Teacher.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
         });
 
-        res.status(200).json(students);
+        if (!teacher) {
+            return res.status(404).json({ message: 'Teacher not found' });
+        }
+
+        res.status(200).json(teacher);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
