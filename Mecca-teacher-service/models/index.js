@@ -1,68 +1,73 @@
-const sequelize = require('../config/database');
+const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database'); // Pastikan path ini benar mengarah ke instance Sequelize
 
-const Admin = require('./Admin');
-const Student = require('./Student');
-const Teacher = require('./Teacher');
-const Class = require('./Class');
-const Subject = require('./Subject');
-const Schedule = require('./Schedule');
-const Attendance = require('./Attendance');
-const Grade = require('./Grade');
-const Fee = require('./Fee');
-const Bill = require('./Bill');
-const LibraryBook = require('./LibraryBook');
-const LibraryLoan = require('./LibraryLoan');
+// 1. Inisialisasi Model (Panggil Function-nya)
+const Admin = require('./Admin')(sequelize, DataTypes);
+const Student = require('./Student')(sequelize, DataTypes);
+const Teacher = require('./Teacher')(sequelize, DataTypes);
+const Class = require('./Class')(sequelize, DataTypes);
+const Subject = require('./Subject')(sequelize, DataTypes);
+const Schedule = require('./Schedule')(sequelize, DataTypes);
+const Attendance = require('./Attendance')(sequelize, DataTypes);
+const Grade = require('./Grade')(sequelize, DataTypes);
+const Fee = require('./Fee')(sequelize, DataTypes);
+const Bill = require('./Bill')(sequelize, DataTypes);
+const LibraryBook = require('./LibraryBook')(sequelize, DataTypes);
+const LibraryLoan = require('./LibraryLoan')(sequelize, DataTypes);
 
-// Associations
+// 2. Definisi Relasi (Associations)
 
-// Class - Student (One-to-Many)
+// Class - Student
 Class.hasMany(Student, { foreignKey: 'classId' });
 Student.belongsTo(Class, { foreignKey: 'classId' });
 
-// Class - Schedule (One-to-Many)
+// Class - Schedule
 Class.hasMany(Schedule, { foreignKey: 'classId' });
 Schedule.belongsTo(Class, { foreignKey: 'classId' });
 
-// Subject - Schedule (One-to-Many)
+// Subject - Schedule
 Subject.hasMany(Schedule, { foreignKey: 'subjectId' });
 Schedule.belongsTo(Subject, { foreignKey: 'subjectId' });
 
-// Teacher - Schedule (One-to-Many)
+// Teacher - Schedule
 Teacher.hasMany(Schedule, { foreignKey: 'teacherId' });
 Schedule.belongsTo(Teacher, { foreignKey: 'teacherId' });
 
-// Student - Attendance (One-to-Many)
+// Student - Attendance
 Student.hasMany(Attendance, { foreignKey: 'studentId' });
 Attendance.belongsTo(Student, { foreignKey: 'studentId' });
 
-// Schedule - Attendance (One-to-Many) - To track attendance per class session
+// Schedule - Attendance
 Schedule.hasMany(Attendance, { foreignKey: 'scheduleId' });
 Attendance.belongsTo(Schedule, { foreignKey: 'scheduleId' });
 
-// Student - Grade (One-to-Many)
+// --- RELASI PENTING UNTUK NILAI ---
+// Student - Grade
 Student.hasMany(Grade, { foreignKey: 'studentId' });
 Grade.belongsTo(Student, { foreignKey: 'studentId' });
 
-// Subject - Grade (One-to-Many)
+// Subject - Grade
 Subject.hasMany(Grade, { foreignKey: 'subjectId' });
 Grade.belongsTo(Subject, { foreignKey: 'subjectId' });
+// ----------------------------------
 
-// Student - Bill (One-to-Many)
+// Student - Bill
 Student.hasMany(Bill, { foreignKey: 'studentId' });
 Bill.belongsTo(Student, { foreignKey: 'studentId' });
 
-// Fee - Bill (One-to-Many)
+// Fee - Bill
 Fee.hasMany(Bill, { foreignKey: 'feeId' });
 Bill.belongsTo(Fee, { foreignKey: 'feeId' });
 
-// Student - LibraryLoan (One-to-Many)
+// Student - LibraryLoan
 Student.hasMany(LibraryLoan, { foreignKey: 'studentId' });
 LibraryLoan.belongsTo(Student, { foreignKey: 'studentId' });
 
-// LibraryBook - LibraryLoan (One-to-Many)
+// LibraryBook - LibraryLoan
 LibraryBook.hasMany(LibraryLoan, { foreignKey: 'bookId' });
 LibraryLoan.belongsTo(LibraryBook, { foreignKey: 'bookId' });
 
+// 3. Export Semua
 module.exports = {
     sequelize,
     Admin,
