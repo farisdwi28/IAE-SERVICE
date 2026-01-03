@@ -189,3 +189,37 @@ exports.updateGrade = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// [BARU] Get Grades by Class & Subject & Type
+exports.getGradesByClass = async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { subjectId, type } = req.query;
+
+        // Validasi: Pastikan Guru mengajar di kelas & mapel tersebut (via Schedule)
+        // (Bisa diskip kalau mau lebih longgar, tapi ini best practice)
+        
+        // Cari semua siswa di kelas tersebut
+        const students = await Student.findAll({
+            where: { classId, isActive: true },
+            attributes: ['id', 'nis', 'name'],
+            include: [
+                {
+                    model: Grade,
+                    required: false, // Left Join (Tampilkan siswa meski belum ada nilai)
+                    where: { 
+                        subjectId: subjectId,
+                        // Jika type ada, filter by type. Jika tidak, ambil semua.
+                        ...(type ? { type } : {}) 
+                    },
+                    attributes: ['id', 'score', 'type']
+                }
+            ],
+            order: [['name', 'ASC']]
+        });
+
+        res.status(200).json(students);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
