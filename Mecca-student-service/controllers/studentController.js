@@ -104,15 +104,30 @@ exports.getSchedule = async (req, res) => {
             order: [['day', 'ASC'], ['startTime', 'ASC']]
         });
         
-        // Manual Fetch Nama Mapel & Guru untuk Schedule (Optional tapi recommended)
-        // Agar response schedule berisi nama mapel, bukan cuma subjectId
+        // 1. Fetch Data Mapel (Nama & Kode)
         const subjectIds = [...new Set(schedules.map(s => s.subjectId))];
         const subjects = await Subject.findAll({ where: { id: subjectIds } });
-        const subMap = {}; subjects.forEach(s => subMap[s.id] = s.name);
+        
+        const subMap = {}; 
+        subjects.forEach(s => {
+            subMap[s.id] = { 
+                name: s.name, 
+                code: s.code // Simpan kode juga
+            };
+        });
 
+        // 2. Fetch Data Guru
+        const teacherIds = [...new Set(schedules.map(s => s.teacherId))];
+        const teachers = await Teacher.findAll({ where: { id: teacherIds } });
+        const teacherMap = {}; 
+        teachers.forEach(t => teacherMap[t.id] = t.name);
+
+        // 3. Gabungkan ke Result
         const result = schedules.map(s => ({
             ...s.toJSON(),
-            subjectName: subMap[s.subjectId] || 'Subject'
+            subjectName: subMap[s.subjectId]?.name || 'Subject',
+            subjectCode: subMap[s.subjectId]?.code || '-', // Kirim subjectCode
+            teacherName: teacherMap[s.teacherId] || 'Guru Pengampu'
         }));
 
         res.status(200).json(result);
