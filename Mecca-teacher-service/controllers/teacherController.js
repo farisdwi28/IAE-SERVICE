@@ -124,9 +124,17 @@ exports.getGradesByClass = async (req, res) => {
         const { classId } = req.params;
         const { subjectId, type } = req.query;
 
-        console.log(`[GET GRADES] Class: ${classId}, Subject: ${subjectId}, Type: ${type}`);
+        console.log(`\n--- [DEBUG] GET GRADES START ---`);
+        console.log(`Params: ClassID=${classId}, SubjectID=${subjectId}, Type=${type}`);
 
-        // Buat filter dinamis untuk Grades
+        // 1. Cek Asosiasi Student
+        if (Student.associations.grades) {
+            console.log("✅ Model Student MEMILIKI asosiasi 'grades'.");
+        } else {
+            console.error("❌ Model Student TIDAK MEMILIKI asosiasi 'grades'.");
+            console.log("Daftar Asosiasi:", Object.keys(Student.associations));
+        }
+
         const gradeFilter = {};
         if (subjectId) gradeFilter.subjectId = subjectId;
         if (type) gradeFilter.type = type;
@@ -134,21 +142,27 @@ exports.getGradesByClass = async (req, res) => {
         const students = await Student.findAll({
             where: { classId, isActive: true },
             attributes: ['id', 'nis', 'name'],
+            // LOGGING SQL AKTIF: Cek terminal untuk lihat query aslinya
+            logging: (sql) => console.log(`[SQL QUERY]: ${sql}`), 
             include: [
                 {
                     model: Grade,
-                    as: 'grades', // <--- PENTING: Harus match dengan models/index.js
-                    required: false, // Left Join (Siswa tetap tampil meski belum ada nilai)
-                    where: gradeFilter, // Filter diterapkan di sini
+                    as: 'grades', // Harus match dengan models/index.js
+                    required: false, // Left Join
+                    where: gradeFilter,
                     attributes: ['id', 'score', 'type', 'subjectId']
                 }
             ],
             order: [['name', 'ASC']]
         });
 
+        // Debug hasil data
+        const countData = students.filter(s => s.grades && s.grades.length > 0).length;
+        console.log(`[DEBUG] Found ${countData} students WITH grades.`);
+        
         res.status(200).json(students);
     } catch (error) {
-        console.error("Error Get Grades:", error);
+        console.error("[ERROR GET GRADES]:", error);
         res.status(500).json({ message: error.message });
     }
 };

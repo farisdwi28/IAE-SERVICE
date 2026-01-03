@@ -71,9 +71,12 @@ if (Schedule && Attendance) {
 
 // --- RELASI PENTING UNTUK NILAI ---
 if (Student && Grade) {
-    Student.hasMany(Grade, { foreignKey: 'studentId' });
-    Grade.belongsTo(Student, { foreignKey: 'studentId' });
-}
+        Student.hasMany(Grade, { foreignKey: 'studentId', as: 'grades' });
+        Grade.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
+        console.log("✅ Relasi Student <-> Grade berhasil di-set.");
+    } else {
+        console.error("❌ Gagal set relasi Student <-> Grade. Salah satu model null.");
+    }
 
 if (Subject && Grade) {
     Subject.hasMany(Grade, { foreignKey: 'subjectId' });
