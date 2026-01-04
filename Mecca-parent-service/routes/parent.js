@@ -185,4 +185,6 @@ router.post('/payment-proof', upload.single('proof'), parentController.uploadPay
  */
 router.put('/catering', parentController.toggleCatering);
 
+router.get('/grades', parentController.getGrades);
+
 module.exports = router;

@@ -166,3 +166,30 @@ exports.toggleCatering = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// --- [BARU] Grades (Nilai) ---
+exports.getGrades = async (req, res) => {
+    try {
+        const grades = await Grade.findAll({
+            where: { studentId: req.user.id }
+        });
+
+        if (!grades.length) return res.status(200).json([]);
+
+        // Manual Fetch Subject Name
+        const subjectIds = [...new Set(grades.map(g => g.subjectId))];
+        const subjects = await Subject.findAll({ where: { id: subjectIds } });
+        
+        const subjectMap = {};
+        subjects.forEach(s => { subjectMap[s.id] = s.name; });
+
+        const result = grades.map(g => ({
+            ...g.toJSON(),
+            subjectName: subjectMap[g.subjectId] || 'Unknown Subject'
+        }));
+
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
