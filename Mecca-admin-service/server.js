@@ -23,6 +23,7 @@ app.use('/api/admin', adminRoutes);
 
 app.post('/api/sync/attendance', syncController.syncAttendanceData);
 app.post('/api/sync/grades', syncController.syncGradeData);
+app.post('/api/sync/bills', syncController.syncBillData);
 
 // Base Route
 app.get('/', (req, res) => {
