@@ -19,7 +19,7 @@ const Bill = sequelize.define(
 			allowNull: false
 		},
 		status: {
-			type: DataTypes.ENUM("Pending", "Paid", "Overdue"),
+			type: DataTypes.ENUM("Pending", "Paid", "Overdue", "Verifying"),
 			defaultValue: "Pending"
 		},
 		dueDate: {
