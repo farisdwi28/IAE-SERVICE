@@ -124,28 +124,47 @@ exports.getLibraryLoans = async (req, res) => {
 };
 
 exports.uploadPaymentProof = async (req, res) => {
-	try {
-		const {billId} = req.body;
-		// Mock path atau path asli dari multer
-		const proofPath = req.file ? req.file.path : "dummy-proof.jpg";
+    console.log("[DEBUG] Start uploadPaymentProof");
+    try {
+        // Cek apakah req.file ada
+        if (!req.file) {
+            console.error("[DEBUG ERROR] No file in req.file");
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+        console.log("[DEBUG] File received:", req.file.path);
 
-		const bill = await Bill.findByPk(billId);
-		if (!bill) return res.status(404).json({message: "Bill not found"});
+        const { billId } = req.body;
+        console.log("[DEBUG] Bill ID form body:", billId);
 
-		// Update Lokal
-		await bill.update({
-			status: "Verifying",
-			paymentProof: proofPath
-		});
+        if (!billId) {
+             console.error("[DEBUG ERROR] Bill ID is missing");
+             return res.status(400).json({ message: 'Bill ID is missing' });
+        }
 
-		// [PENTING] Broadcast perubahan ini ke Admin & Student
-		// Agar Admin bisa lihat status "Verifying" dan link gambarnya
-		await broadcastToServices("UPDATE", bill.toJSON());
+        const bill = await Bill.findByPk(billId);
+        if (!bill) {
+            console.error("[DEBUG ERROR] Bill not found in DB");
+            return res.status(404).json({ message: 'Bill not found' });
+        }
 
-		res.status(200).json({message: "Payment proof uploaded successfully"});
-	} catch (error) {
-		res.status(500).json({message: error.message});
-	}
+        console.log("[DEBUG] Bill found, updating...");
+        
+        // Update DB
+        await bill.update({
+            status: 'Verifying',
+            paymentProof: req.file.path
+        });
+        console.log("[DEBUG] DB Updated.");
+
+        // Broadcast
+        await broadcastToServices('UPDATE', bill.toJSON());
+        console.log("[DEBUG] Broadcast done.");
+
+        res.status(200).json({ message: 'Payment proof uploaded successfully' });
+    } catch (error) {
+        console.error("[DEBUG FATAL ERROR]", error); // <--- INI YG KITA CARI
+        res.status(500).json({ message: error.message, stack: error.stack });
+    }
 };
 
 exports.toggleCatering = async (req, res) => {
