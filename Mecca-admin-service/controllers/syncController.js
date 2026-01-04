@@ -268,51 +268,53 @@ exports.syncGradeData = async (req, res) => {
 
 // --- SYNC BILLS (TAGIHAN) - PENTING UNTUK BUKTI BAYAR ---
 exports.syncBillData = async (req, res) => {
-	let action = "UNKNOWN";
-	try {
-		const body = req.body;
-		if (body.action) action = body.action;
-		const data = body.data;
+    let action = 'UNKNOWN';
+    try {
+        const body = req.body;
+        if (body.action) action = body.action;
+        const data = body.data;
 
-		console.log(`[SYNC BILL] Action: ${action} | Bill Number: ${data.billNumber}`);
+        console.log(`[SYNC BILL] Action: ${action} | Bill Number: ${data.billNumber}`);
 
-		if (action === "BULK_CREATE") {
-			await Bill.bulkCreate(data, {
-				// Hapus updatedAt dari updateOnDuplicate untuk menghindari konflik waktu
-				updateOnDuplicate: ["status", "paymentProof", "paidDate"]
-			});
-		} else if (action === "CREATE" || action === "UPDATE") {
-			const payload = {
-				id: data.id,
-				billNumber: data.billNumber,
-				amount: data.amount,
-				status: data.status,
-				dueDate: data.dueDate,
-				studentId: data.studentId,
-				feeId: data.feeId,
-				month: data.month,
-				year: data.year,
-				// Pastikan paymentProof diambil dengan aman
-				paymentProof: data.paymentProof || null,
-				paidDate: data.paidDate ? new Date(data.paidDate) : null
-			};
+        if (action === 'BULK_CREATE') {
+            await Bill.bulkCreate(data, { 
+                // Hapus updatedAt dari updateOnDuplicate untuk menghindari konflik waktu
+                updateOnDuplicate: ['status', 'paymentProof', 'paidDate'] 
+            });
+        } 
+        else if (action === 'CREATE' || action === 'UPDATE') {
+            const payload = {
+                id: data.id,
+                billNumber: data.billNumber,
+                amount: data.amount,
+                status: data.status,
+                dueDate: data.dueDate,
+                studentId: data.studentId,
+                feeId: data.feeId,
+                month: data.month,
+                year: data.year,
+                // Pastikan paymentProof diambil dengan aman
+                paymentProof: data.paymentProof || null, 
+                paidDate: data.paidDate ? new Date(data.paidDate) : null
+            };
+            
+            const existing = await Bill.findByPk(data.id);
+            if (existing) {
+                await existing.update(payload);
+                console.log(`[SYNC BILL] Updated Bill ${data.id} status to ${data.status}`);
+            } else {
+                await Bill.create(payload);
+                console.log(`[SYNC BILL] Created Bill ${data.id}`);
+            }
+        } 
+        else if (action === 'DELETE') {
+            await Bill.destroy({ where: { id: data.id } });
+        }
 
-			const existing = await Bill.findByPk(data.id);
-			if (existing) {
-				await existing.update(payload);
-				console.log(`[SYNC BILL] Updated Bill ${data.id} status to ${data.status}`);
-			} else {
-				await Bill.create(payload);
-				console.log(`[SYNC BILL] Created Bill ${data.id}`);
-			}
-		} else if (action === "DELETE") {
-			await Bill.destroy({where: {id: data.id}});
-		}
-
-		res.status(200).json({message: "Bill sync successful"});
-	} catch (error) {
-		console.error(`[SYNC BILL ERROR]`, error.message);
-		// Tetap return 500 agar pengirim tahu ada yang salah
-		res.status(500).json({message: error.message});
-	}
+        res.status(200).json({ message: 'Bill sync successful' });
+    } catch (error) {
+        console.error(`[SYNC BILL ERROR]`, error.message);
+        // Tetap return 500 agar pengirim tahu ada yang salah
+        res.status(500).json({ message: error.message });
+    }
 };
