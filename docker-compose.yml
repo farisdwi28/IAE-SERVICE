@@ -88,7 +88,7 @@ services:
     env_file:
       - ./Mecca-parent-service/.env
     volumes:
-      - ./uploads_data:/app/uploads
+      - ./Mecca-parent-service/uploads:/app/uploads
     environment:
       - PORT=3005
       # - DB_HOST=host.docker.internal  # <--- INI KUNCINYA
