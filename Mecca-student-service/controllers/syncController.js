@@ -310,21 +310,23 @@ exports.syncBillData = async (req, res) => {
 
 		if (action === "BULK_CREATE") {
 			await Bill.bulkCreate(data, {
-				updateOnDuplicate: ["status", "paymentProof", "paidDate", "updatedAt"]
+				// Hapus updatedAt dari updateOnDuplicate untuk menghindari konflik waktu
+				updateOnDuplicate: ["status", "paymentProof", "paidDate"]
 			});
 		} else if (action === "CREATE" || action === "UPDATE") {
 			const payload = {
 				id: data.id,
 				billNumber: data.billNumber,
 				amount: data.amount,
-				status: data.status, // Akan terupdate jadi 'Verifying' atau 'Paid'
+				status: data.status,
 				dueDate: data.dueDate,
 				studentId: data.studentId,
 				feeId: data.feeId,
 				month: data.month,
 				year: data.year,
-				paymentProof: data.paymentProof, // <--- INI YG PENTING (Path Gambar)
-				paidDate: data.paidDate
+				// Pastikan paymentProof diambil dengan aman
+				paymentProof: data.paymentProof || null,
+				paidDate: data.paidDate ? new Date(data.paidDate) : null
 			};
 
 			const existing = await Bill.findByPk(data.id);
@@ -342,6 +344,7 @@ exports.syncBillData = async (req, res) => {
 		res.status(200).json({message: "Bill sync successful"});
 	} catch (error) {
 		console.error(`[SYNC BILL ERROR]`, error.message);
+		// Tetap return 500 agar pengirim tahu ada yang salah
 		res.status(500).json({message: error.message});
 	}
 };
