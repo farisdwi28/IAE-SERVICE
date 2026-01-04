@@ -1,195 +1,227 @@
-const { Student, Attendance, Schedule, Bill, Fee, Class, Subject, LibraryLoan, LibraryBook, Grade } = require('../models');
+const axios = require("axios");
+const {Student, Attendance, Schedule, Bill, Fee, Class, Subject, LibraryLoan, LibraryBook, Grade} = require("../models");
+// const { Op } = require('sequelize');
 
+const broadcastToServices = async (action, data) => {
+	const services = [
+		"http://admin-service:3002", // Agar Admin tahu status berubah jadi Verifying
+		"http://student-service:3003" // Agar Siswa tahu orang tuanya sudah bayar
+	];
+
+	console.log(`[BROADCAST PARENT] Sending ${action} for Bill ${data.billNumber}...`);
+
+	const syncPromises = services.map((serviceUrl) => {
+		return axios
+			.post(`${serviceUrl}/api/sync/bills`, {
+				action: action,
+				data: data
+			})
+			.catch((err) => {
+				console.error(`Gagal sync dari Parent ke ${serviceUrl}:`, err.message);
+			});
+	});
+
+	await Promise.all(syncPromises);
+};
 // Since Parent logs in with Student credentials, req.user.id is the Student ID.
 
 exports.getStudentData = async (req, res) => {
-    try {
-        const student = await Student.findByPk(req.user.id, {
-            attributes: { exclude: ['password'] },
-            include: [{ model: Class, attributes: ['name'] }]
-        });
-        res.status(200).json(student);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+	try {
+		const student = await Student.findByPk(req.user.id, {
+			attributes: {exclude: ["password"]},
+			include: [{model: Class, attributes: ["name"]}]
+		});
+		res.status(200).json(student);
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.getAttendance = async (req, res) => {
-    try {
-        const { page = 1, limit = 10 } = req.query;
-        const offset = (page - 1) * limit;
+	try {
+		const {page = 1, limit = 10} = req.query;
+		const offset = (page - 1) * limit;
 
-        const { count, rows } = await Attendance.findAndCountAll({
-            where: { studentId: req.user.id },
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            order: [['date', 'DESC']]
-        });
+		const {count, rows} = await Attendance.findAndCountAll({
+			where: {studentId: req.user.id},
+			limit: parseInt(limit),
+			offset: parseInt(offset),
+			order: [["date", "DESC"]]
+		});
 
-        res.status(200).json({
-            totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
-            attendance: rows
-        });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		res.status(200).json({
+			totalItems: count,
+			totalPages: Math.ceil(count / limit),
+			currentPage: parseInt(page),
+			attendance: rows
+		});
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.getSchedule = async (req, res) => {
-    try {
-        const student = await Student.findByPk(req.user.id);
-        if (!student) return res.status(404).json({ message: 'Student not found' });
+	try {
+		const student = await Student.findByPk(req.user.id);
+		if (!student) return res.status(404).json({message: "Student not found"});
 
-        const schedule = await Schedule.findAll({
-            where: { classId: student.classId },
-            include: [{ model: Subject, attributes: ['name'] }]
-        });
-        res.status(200).json(schedule);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		const schedule = await Schedule.findAll({
+			where: {classId: student.classId},
+			include: [{model: Subject, attributes: ["name"]}]
+		});
+		res.status(200).json(schedule);
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.getBills = async (req, res) => {
-    try {
-        const { page = 1, limit = 10 } = req.query;
-        const offset = (page - 1) * limit;
+	try {
+		const {page = 1, limit = 10} = req.query;
+		const offset = (page - 1) * limit;
 
-        const { count, rows } = await Bill.findAndCountAll({
-            where: { studentId: req.user.id },
-            include: [{ model: Fee, attributes: ['name'] }],
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            order: [['createdAt', 'DESC']]
-        });
+		const {count, rows} = await Bill.findAndCountAll({
+			where: {studentId: req.user.id},
+			include: [{model: Fee, attributes: ["name"]}],
+			limit: parseInt(limit),
+			offset: parseInt(offset),
+			order: [["createdAt", "DESC"]]
+		});
 
-        res.status(200).json({
-            totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
-            bills: rows
-        });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		res.status(200).json({
+			totalItems: count,
+			totalPages: Math.ceil(count / limit),
+			currentPage: parseInt(page),
+			bills: rows
+		});
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.getLibraryLoans = async (req, res) => {
-    try {
-        const { page = 1, limit = 10 } = req.query;
-        const offset = (page - 1) * limit;
+	try {
+		const {page = 1, limit = 10} = req.query;
+		const offset = (page - 1) * limit;
 
-        const { count, rows } = await LibraryLoan.findAndCountAll({
-            where: { studentId: req.user.id },
-            include: [{ model: LibraryBook, attributes: ['title', 'author'] }],
-            limit: parseInt(limit),
-            offset: parseInt(offset),
-            order: [['loanDate', 'DESC']]
-        });
+		const {count, rows} = await LibraryLoan.findAndCountAll({
+			where: {studentId: req.user.id},
+			include: [{model: LibraryBook, attributes: ["title", "author"]}],
+			limit: parseInt(limit),
+			offset: parseInt(offset),
+			order: [["loanDate", "DESC"]]
+		});
 
-        res.status(200).json({
-            totalItems: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
-            loans: rows
-        });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		res.status(200).json({
+			totalItems: count,
+			totalPages: Math.ceil(count / limit),
+			currentPage: parseInt(page),
+			loans: rows
+		});
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.uploadPaymentProof = async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
-        }
+	try {
+		const {billId} = req.body;
+		// Mock path atau path asli dari multer
+		const proofPath = req.file ? req.file.path : "dummy-proof.jpg";
 
-        const proofUrl = `/uploads/${req.file.filename}`; // Relative path to be served statically
+		const bill = await Bill.findByPk(billId);
+		if (!bill) return res.status(404).json({message: "Bill not found"});
 
-        const student = await Student.findByPk(req.user.id);
-        if (!student) return res.status(404).json({ message: 'Student not found' });
+		// Update Lokal
+		await bill.update({
+			status: "Verifying",
+			paymentProof: proofPath
+		});
 
-        await student.update({ paymentProof: proofUrl });
-        res.status(200).json({ message: 'Payment proof uploaded successfully', proofUrl });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		// [PENTING] Broadcast perubahan ini ke Admin & Student
+		// Agar Admin bisa lihat status "Verifying" dan link gambarnya
+		await broadcastToServices("UPDATE", bill.toJSON());
+
+		res.status(200).json({message: "Payment proof uploaded successfully"});
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 exports.toggleCatering = async (req, res) => {
-    try {
-        const { isCatering } = req.body; // boolean
+	try {
+		const {isCatering} = req.body; // boolean
 
-        const student = await Student.findByPk(req.user.id);
-        if (!student) return res.status(404).json({ message: 'Student not found' });
+		const student = await Student.findByPk(req.user.id);
+		if (!student) return res.status(404).json({message: "Student not found"});
 
-        await student.update({ isCatering });
+		await student.update({isCatering});
 
-        if (isCatering) {
-            const currentMonth = new Date().getMonth() + 1;
-            const currentYear = new Date().getFullYear();
+		if (isCatering) {
+			const currentMonth = new Date().getMonth() + 1;
+			const currentYear = new Date().getFullYear();
 
-            const cateringFee = await Fee.findOne({ where: { name: 'Katering' } }); // Assuming name is 'Katering'
+			const cateringFee = await Fee.findOne({where: {name: "Katering"}}); // Assuming name is 'Katering'
 
-            if (cateringFee) {
-                const existingBill = await Bill.findOne({
-                    where: {
-                        studentId: student.id,
-                        feeId: cateringFee.id,
-                        month: currentMonth,
-                        year: currentYear
-                    }
-                });
+			if (cateringFee) {
+				const existingBill = await Bill.findOne({
+					where: {
+						studentId: student.id,
+						feeId: cateringFee.id,
+						month: currentMonth,
+						year: currentYear
+					}
+				});
 
-                if (!existingBill) {
-                    const dueDate = new Date();
-                    dueDate.setMonth(dueDate.getMonth() + 1);
+				if (!existingBill) {
+					const dueDate = new Date();
+					dueDate.setMonth(dueDate.getMonth() + 1);
 
-                    await Bill.create({
-                        billNumber: `BILL-${student.nis}-CAT-${currentMonth}-${currentYear}`,
-                        amount: cateringFee.amount,
-                        status: 'Pending',
-                        dueDate: dueDate,
-                        studentId: student.id,
-                        feeId: cateringFee.id,
-                        month: currentMonth,
-                        year: currentYear
-                    });
-                }
-            }
-        }
+					await Bill.create({
+						billNumber: `BILL-${student.nis}-CAT-${currentMonth}-${currentYear}`,
+						amount: cateringFee.amount,
+						status: "Pending",
+						dueDate: dueDate,
+						studentId: student.id,
+						feeId: cateringFee.id,
+						month: currentMonth,
+						year: currentYear
+					});
+				}
+			}
+		}
 
-        res.status(200).json({ message: `Catering status updated to ${isCatering}` });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		res.status(200).json({message: `Catering status updated to ${isCatering}`});
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
 
 // --- [BARU] Grades (Nilai) ---
 exports.getGrades = async (req, res) => {
-    try {
-        const grades = await Grade.findAll({
-            where: { studentId: req.user.id }
-        });
+	try {
+		const grades = await Grade.findAll({
+			where: {studentId: req.user.id}
+		});
 
-        if (!grades.length) return res.status(200).json([]);
+		if (!grades.length) return res.status(200).json([]);
 
-        // Manual Fetch Subject Name
-        const subjectIds = [...new Set(grades.map(g => g.subjectId))];
-        const subjects = await Subject.findAll({ where: { id: subjectIds } });
-        
-        const subjectMap = {};
-        subjects.forEach(s => { subjectMap[s.id] = s.name; });
+		// Manual Fetch Subject Name
+		const subjectIds = [...new Set(grades.map((g) => g.subjectId))];
+		const subjects = await Subject.findAll({where: {id: subjectIds}});
 
-        const result = grades.map(g => ({
-            ...g.toJSON(),
-            subjectName: subjectMap[g.subjectId] || 'Unknown Subject'
-        }));
+		const subjectMap = {};
+		subjects.forEach((s) => {
+			subjectMap[s.id] = s.name;
+		});
 
-        res.status(200).json(result);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+		const result = grades.map((g) => ({
+			...g.toJSON(),
+			subjectName: subjectMap[g.subjectId] || "Unknown Subject"
+		}));
+
+		res.status(200).json(result);
+	} catch (error) {
+		res.status(500).json({message: error.message});
+	}
 };
