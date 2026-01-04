@@ -1,4 +1,4 @@
-const { Student, Attendance, Schedule, Bill, Fee, Class, Subject, LibraryLoan, LibraryBook } = require('../models');
+const { Student, Attendance, Schedule, Bill, Fee, Class, Subject, LibraryLoan, LibraryBook, Grade } = require('../models');
 
 // Since Parent logs in with Student credentials, req.user.id is the Student ID.
 
