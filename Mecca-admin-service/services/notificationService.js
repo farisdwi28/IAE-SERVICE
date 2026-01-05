@@ -2,8 +2,8 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.mailersend.net',
-    port: process.env.SMTP_PORT || 587,
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
     secure: false, // true for 465, false for other ports
     auth: {
         user: process.env.EMAIL_USER,
