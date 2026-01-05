@@ -185,7 +185,7 @@ exports.sendBillReminder = async (req, res) => {
     try {
         const { id } = req.params;
         // Import service notifikasi jika ada
-        // const { sendEmail } = require('../services/notificationService');
+        const { sendEmail } = require('../services/notificationService');
 
         const bill = await Bill.findByPk(id, {
             include: [
