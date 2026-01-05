@@ -157,6 +157,11 @@ exports.createStudent = async (req, res) => {
 		// Kita kirim data JSON plain student
 		await broadcastToServices("CREATE", student.toJSON());
 
+		// B. [FIX] Broadcast Bills (endpoint 'bills')
+        if (createdBills.length > 0) {
+            await broadcastToServices('bills', 'BULK_CREATE', createdBills);
+        }
+
 		await t.commit();
 
 		res.status(201).json({
