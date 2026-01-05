@@ -311,10 +311,33 @@ exports.deleteStudent = async (req, res) => {
 
         // 1. Hapus Akun di Auth Service
         try {
+            // Hapus Akun Siswa (Berdasarkan NIS)
             await axios.post('http://auth-service:3001/graphql', {
                 query: `mutation DeleteUser($username: String!) { deleteUser(username: $username) }`,
                 variables: { username: student.nis }
             });
+
+            // [BARU] Hapus Akun Orang Tua (Hanya jika tidak ada anak lain yg pakai email ini)
+            if (student.parentEmail) {
+                // Hitung apakah ada siswa lain dengan email parent yg sama
+                const siblingsCount = await Student.count({ 
+                    where: { 
+                        parentEmail: student.parentEmail,
+                        id: { [Op.ne]: id } // Kecuali siswa yang sedang dihapus
+                    } 
+                });
+
+                if (siblingsCount === 0) {
+                    console.log(`[AUTH] Deleting parent account ${student.parentEmail} as no other students are linked.`);
+                    await axios.post('http://auth-service:3001/graphql', {
+                        query: `mutation DeleteUser($username: String!) { deleteUser(username: $username) }`,
+                        variables: { username: student.parentEmail }
+                    });
+                } else {
+                    console.log(`[AUTH] Parent account ${student.parentEmail} preserved (linked to ${siblingsCount} other students).`);
+                }
+            }
+
         } catch (authErr) {
             console.warn(`[WARNING] Gagal menghapus akun Auth:`, authErr.message);
         }
