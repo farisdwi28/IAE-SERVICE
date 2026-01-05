@@ -1,4 +1,4 @@
-const {Student, Teacher, Schedule, Attendance, Grade, Class, Subject} = require("../models");
+const {Student, Teacher, Schedule, Attendance, Grade, Class, Subject, Bill} = require("../models");
 
 // --- SYNC STUDENTS ---
 exports.syncStudentData = async (req, res) => {
