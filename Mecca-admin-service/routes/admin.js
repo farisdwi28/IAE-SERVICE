@@ -144,6 +144,8 @@ router.use(verifyToken, checkRole(['admin']));
  */
 router.get('/students', studentController.getAllStudents);
 
+router.get('/students/:id', studentController.getStudentById);
+
 /**
  * @swagger
  * /students:
