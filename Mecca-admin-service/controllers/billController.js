@@ -218,7 +218,7 @@ School Administration
 
         if (parentEmail) {
             // Uncomment jika service email sudah siap
-            // await sendEmail(parentEmail, subject, message);
+            await sendEmail(parentEmail, subject, message);
             
             // Simulasi sukses
             console.log(`[EMAIL MOCK] To: ${parentEmail} | Subject: ${subject}`);
