@@ -82,8 +82,10 @@ exports.createStudent = async (req, res) => {
 
 		const fees = await Fee.findAll({where: {name: ["Uang Gedung", "SPP"]}, transaction: t});
 
+		const createdBills = []; // Array penampung tagihan baru
+
 		for (const fee of fees) {
-			await Bill.create(
+			const newBill = await Bill.create(
 				{
 					billNumber: `BILL-${student.nis}-${fee.name.substr(0, 3).toUpperCase()}-${Date.now()}`,
 					amount: fee.amount,
@@ -96,6 +98,8 @@ exports.createStudent = async (req, res) => {
 				},
 				{transaction: t}
 			);
+
+			createdBills.push(newBill.toJSON());
 		}
 
 		// E. Register Akun ke Auth Service (GraphQL)
@@ -158,9 +162,9 @@ exports.createStudent = async (req, res) => {
 		await broadcastToServices("CREATE", student.toJSON());
 
 		// B. [FIX] Broadcast Bills (endpoint 'bills')
-        if (createdBills.length > 0) {
-            await broadcastToServices('bills', 'BULK_CREATE', createdBills);
-        }
+		if (createdBills.length > 0) {
+			await broadcastToServices("bills", "BULK_CREATE", createdBills);
+		}
 
 		await t.commit();
 
