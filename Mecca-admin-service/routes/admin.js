@@ -287,6 +287,8 @@ router.post('/students/:id/promote', studentController.promoteStudent);
  */
 router.get('/teachers', teacherController.getAllTeachers);
 
+router.get('/teachers/:id', teacherController.getTeacherById);
+
 /**
  * @swagger
  * /teachers:
