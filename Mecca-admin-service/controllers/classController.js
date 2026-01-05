@@ -52,6 +52,17 @@ exports.getAllClasses = async (req, res) => {
     }
 };
 
+exports.getClassById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const cls = await Class.findByPk(id);
+        if (!cls) return res.status(404).json({ message: 'Class not found' });
+        res.status(200).json(cls);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 exports.updateClass = async (req, res) => {
     try {
         const { id } = req.params;

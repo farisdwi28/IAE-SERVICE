@@ -1,17 +1,17 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const studentController = require('../controllers/studentController');
-const teacherController = require('../controllers/teacherController');
-const classController = require('../controllers/classController');
-const subjectController = require('../controllers/subjectController');
-const scheduleController = require('../controllers/scheduleController');
-const feeController = require('../controllers/feeController');
-const billController = require('../controllers/billController');
-const notificationController = require('../controllers/notificationController');
-const { verifyToken, checkRole } = require('../middleware/authMiddleware');
+const studentController = require("../controllers/studentController");
+const teacherController = require("../controllers/teacherController");
+const classController = require("../controllers/classController");
+const subjectController = require("../controllers/subjectController");
+const scheduleController = require("../controllers/scheduleController");
+const feeController = require("../controllers/feeController");
+const billController = require("../controllers/billController");
+const notificationController = require("../controllers/notificationController");
+const {verifyToken, checkRole} = require("../middleware/authMiddleware");
 
 // Middleware to protect all admin routes
-router.use(verifyToken, checkRole(['admin']));
+router.use(verifyToken, checkRole(["admin"]));
 
 /**
  * @swagger
@@ -118,7 +118,6 @@ router.use(verifyToken, checkRole(['admin']));
  *           type: number
  */
 
-
 // Students
 /**
  * @swagger
@@ -142,9 +141,9 @@ router.use(verifyToken, checkRole(['admin']));
  *       200:
  *         description: List of students
  */
-router.get('/students', studentController.getAllStudents);
+router.get("/students", studentController.getAllStudents);
 
-router.get('/students/:id', studentController.getStudentById);
+router.get("/students/:id", studentController.getStudentById);
 
 /**
  * @swagger
@@ -163,7 +162,7 @@ router.get('/students/:id', studentController.getStudentById);
  *       201:
  *         description: Student created
  */
-router.post('/students', studentController.createStudent);
+router.post("/students", studentController.createStudent);
 
 /**
  * @swagger
@@ -189,7 +188,7 @@ router.post('/students', studentController.createStudent);
  *       404:
  *         description: Student not found
  */
-router.put('/students/:id', studentController.updateStudent);
+router.put("/students/:id", studentController.updateStudent);
 
 /**
  * @swagger
@@ -209,7 +208,7 @@ router.put('/students/:id', studentController.updateStudent);
  *       404:
  *         description: Student not found
  */
-router.delete('/students/:id', studentController.deleteStudent);
+router.delete("/students/:id", studentController.deleteStudent);
 
 /**
  * @swagger
@@ -241,7 +240,7 @@ router.delete('/students/:id', studentController.deleteStudent);
  *       404:
  *         description: Student not found
  */
-router.post('/students/:id/approve', studentController.approveStudent);
+router.post("/students/:id/approve", studentController.approveStudent);
 
 /**
  * @swagger
@@ -261,7 +260,7 @@ router.post('/students/:id/approve', studentController.approveStudent);
  *       404:
  *         description: Student not found
  */
-router.post('/students/:id/promote', studentController.promoteStudent);
+router.post("/students/:id/promote", studentController.promoteStudent);
 
 // Teachers
 /**
@@ -285,9 +284,9 @@ router.post('/students/:id/promote', studentController.promoteStudent);
  *       200:
  *         description: List of teachers
  */
-router.get('/teachers', teacherController.getAllTeachers);
+router.get("/teachers", teacherController.getAllTeachers);
 
-router.get('/teachers/:id', teacherController.getTeacherById);
+router.get("/teachers/:id", teacherController.getTeacherById);
 
 /**
  * @swagger
@@ -306,7 +305,7 @@ router.get('/teachers/:id', teacherController.getTeacherById);
  *       201:
  *         description: Teacher created
  */
-router.post('/teachers', teacherController.createTeacher);
+router.post("/teachers", teacherController.createTeacher);
 
 /**
  * @swagger
@@ -332,7 +331,7 @@ router.post('/teachers', teacherController.createTeacher);
  *       404:
  *         description: Teacher not found
  */
-router.put('/teachers/:id', teacherController.updateTeacher);
+router.put("/teachers/:id", teacherController.updateTeacher);
 
 /**
  * @swagger
@@ -352,7 +351,7 @@ router.put('/teachers/:id', teacherController.updateTeacher);
  *       404:
  *         description: Teacher not found
  */
-router.delete('/teachers/:id', teacherController.deleteTeacher);
+router.delete("/teachers/:id", teacherController.deleteTeacher);
 
 // Classes
 /**
@@ -366,7 +365,9 @@ router.delete('/teachers/:id', teacherController.deleteTeacher);
  *       200:
  *         description: List of classes
  */
-router.get('/classes', classController.getAllClasses);
+router.get("/classes", classController.getAllClasses);
+
+router.get("/classes/:id", classController.getClassById);
 
 /**
  * @swagger
@@ -385,7 +386,7 @@ router.get('/classes', classController.getAllClasses);
  *       201:
  *         description: Class created
  */
-router.post('/classes', classController.createClass);
+router.post("/classes", classController.createClass);
 
 /**
  * @swagger
@@ -408,7 +409,7 @@ router.post('/classes', classController.createClass);
  *       200:
  *         description: Class updated
  */
-router.put('/classes/:id', classController.updateClass);
+router.put("/classes/:id", classController.updateClass);
 
 /**
  * @swagger
@@ -426,7 +427,7 @@ router.put('/classes/:id', classController.updateClass);
  *       200:
  *         description: Class deleted
  */
-router.delete('/classes/:id', classController.deleteClass);
+router.delete("/classes/:id", classController.deleteClass);
 
 // Subjects
 /**
@@ -440,7 +441,9 @@ router.delete('/classes/:id', classController.deleteClass);
  *       200:
  *         description: List of subjects
  */
-router.get('/subjects', subjectController.getAllSubjects);
+router.get("/subjects", subjectController.getAllSubjects);
+
+router.get('/subjects/:id', subjectController.getSubjectById);
 
 /**
  * @swagger
@@ -458,7 +461,7 @@ router.get('/subjects', subjectController.getAllSubjects);
  *       201:
  *         description: Subject created
  */
-router.post('/subjects', subjectController.createSubject);
+router.post("/subjects", subjectController.createSubject);
 
 /**
  * @swagger
@@ -481,7 +484,7 @@ router.post('/subjects', subjectController.createSubject);
  *       200:
  *         description: Subject updated
  */
-router.put('/subjects/:id', subjectController.updateSubject);
+router.put("/subjects/:id", subjectController.updateSubject);
 
 /**
  * @swagger
@@ -499,7 +502,7 @@ router.put('/subjects/:id', subjectController.updateSubject);
  *       200:
  *         description: Subject deleted
  */
-router.delete('/subjects/:id', subjectController.deleteSubject);
+router.delete("/subjects/:id", subjectController.deleteSubject);
 
 // Schedule
 /**
@@ -520,7 +523,7 @@ router.delete('/subjects/:id', subjectController.deleteSubject);
  *       200:
  *         description: List of schedules
  */
-router.get('/schedules', scheduleController.getAllSchedules);
+router.get("/schedules", scheduleController.getAllSchedules);
 
 /**
  * @swagger
@@ -538,7 +541,7 @@ router.get('/schedules', scheduleController.getAllSchedules);
  *       201:
  *         description: Schedule created
  */
-router.post('/schedules', scheduleController.createSchedule);
+router.post("/schedules", scheduleController.createSchedule);
 
 /**
  * @swagger
@@ -561,7 +564,7 @@ router.post('/schedules', scheduleController.createSchedule);
  *       200:
  *         description: Schedule updated
  */
-router.put('/schedules/:id', scheduleController.updateSchedule);
+router.put("/schedules/:id", scheduleController.updateSchedule);
 
 /**
  * @swagger
@@ -579,7 +582,7 @@ router.put('/schedules/:id', scheduleController.updateSchedule);
  *       200:
  *         description: Schedule deleted
  */
-router.delete('/schedules/:id', scheduleController.deleteSchedule);
+router.delete("/schedules/:id", scheduleController.deleteSchedule);
 
 /**
  * @swagger
@@ -592,7 +595,7 @@ router.delete('/schedules/:id', scheduleController.deleteSchedule);
  *       200:
  *         description: All schedules deleted
  */
-router.delete('/schedules', scheduleController.deleteAllSchedules);
+router.delete("/schedules", scheduleController.deleteAllSchedules);
 
 /**
  * @swagger
@@ -605,7 +608,7 @@ router.delete('/schedules', scheduleController.deleteAllSchedules);
  *       200:
  *         description: Schedules generated
  */
-router.post('/schedules/auto-generate', scheduleController.autoGenerateSchedule);
+router.post("/schedules/auto-generate", scheduleController.autoGenerateSchedule);
 
 // Fees
 /**
@@ -619,7 +622,7 @@ router.post('/schedules/auto-generate', scheduleController.autoGenerateSchedule)
  *       200:
  *         description: List of fees
  */
-router.get('/fees', feeController.getAllFees);
+router.get("/fees", feeController.getAllFees);
 
 /**
  * @swagger
@@ -638,7 +641,7 @@ router.get('/fees', feeController.getAllFees);
  *       201:
  *         description: Fee created
  */
-router.post('/fees', feeController.createFee);
+router.post("/fees", feeController.createFee);
 
 /**
  * @swagger
@@ -662,7 +665,7 @@ router.post('/fees', feeController.createFee);
  *       200:
  *         description: Fee updated
  */
-router.put('/fees/:id', feeController.updateFee);
+router.put("/fees/:id", feeController.updateFee);
 
 /**
  * @swagger
@@ -680,7 +683,7 @@ router.put('/fees/:id', feeController.updateFee);
  *       200:
  *         description: Fee deleted
  */
-router.delete('/fees/:id', feeController.deleteFee);
+router.delete("/fees/:id", feeController.deleteFee);
 
 // Bills
 
@@ -730,8 +733,7 @@ router.delete('/fees/:id', feeController.deleteFee);
  *       500:
  *         description: Server error
  */
-router.post('/bills', billController.createBill);
-
+router.post("/bills", billController.createBill);
 
 /**
  * @swagger
@@ -757,7 +759,7 @@ router.post('/bills', billController.createBill);
  *       200:
  *         description: List of bills
  */
-router.get('/bills', billController.getAllBills);
+router.get("/bills", billController.getAllBills);
 
 /**
  * @swagger
@@ -777,7 +779,7 @@ router.get('/bills', billController.getAllBills);
  *       404:
  *         description: Bill not found
  */
-router.put('/bills/:id/pay', billController.markBillAsPaid);
+router.put("/bills/:id/pay", billController.markBillAsPaid);
 
 /**
  * @swagger
@@ -797,7 +799,7 @@ router.put('/bills/:id/pay', billController.markBillAsPaid);
  *       404:
  *         description: Bill not found
  */
-router.post('/bills/:id/remind', billController.sendBillReminder);
+router.post("/bills/:id/remind", billController.sendBillReminder);
 
 // Notifications (Manual Trigger)
 /**
@@ -811,7 +813,7 @@ router.post('/bills/:id/remind', billController.sendBillReminder);
  *       200:
  *         description: Fee notifications triggered
  */
-router.post('/notifications/check-fees', notificationController.triggerFeeChecks);
+router.post("/notifications/check-fees", notificationController.triggerFeeChecks);
 
 /**
  * @swagger
@@ -824,7 +826,7 @@ router.post('/notifications/check-fees', notificationController.triggerFeeChecks
  *       200:
  *         description: Library notifications triggered
  */
-router.post('/notifications/check-library', notificationController.triggerLibraryChecks);
+router.post("/notifications/check-library", notificationController.triggerLibraryChecks);
 
 /**
  * @swagger
@@ -848,6 +850,6 @@ router.post('/notifications/check-library', notificationController.triggerLibrar
  *       200:
  *         description: Test email sent
  */
-router.post('/notifications/test-email', notificationController.sendTestEmail);
+router.post("/notifications/test-email", notificationController.sendTestEmail);
 
 module.exports = router;

@@ -94,6 +94,17 @@ exports.getAllSubjects = async (req, res) => {
     }
 };
 
+exports.getSubjectById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const sbj = await Subject.findByPk(id);
+        if (!sbj) return res.status(404).json({ message: 'Subject not found' });
+        res.status(200).json(sbj);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 exports.updateSubject = async (req, res) => {
     try {
         const { id } = req.params;
